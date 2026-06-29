@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox spacing="10" style="-fx-padding: 20;"
+      xmlns:fx="http://javafx.com/fxml"
+      fx:controller="client.controllers.testController">
+
+    <Label text="Twitter" style="-fx-font-size: 16px;"/>
+    <Button text="Ping Server" onAction="#handlePing"/>
+    <Label fx:id="responseLabel" text="Response will appear here"/>
+
+</VBox>
