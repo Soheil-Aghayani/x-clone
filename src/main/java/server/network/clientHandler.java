@@ -1,10 +1,16 @@
 package server.network;
 
 import com.google.gson.Gson;
-import shared.protocol.message;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+import shared.protocol.MessageCodec;
+import shared.protocol.Request;
+import shared.protocol.RequestType;
+import shared.protocol.Response;
 
 import java.io.*;
 import java.net.Socket;
+import java.security.MessageDigest;
 
 public class clientHandler implements Runnable {
     private final Socket socket;
@@ -23,14 +29,13 @@ public class clientHandler implements Runnable {
                         socket.getOutputStream(), true)
         ) {
             String raw;
-            int count = 1;
             while ((raw = in.readLine()) != null) {
-                message message = gson.fromJson(raw, message.class);
+                Request message = MessageCodec.decodeRequest(raw);
                 System.out.println("Received: " + message.getType());
 
-                if (message.getType().equals("ping")) {
-                    message response = new message("ping", "Hello from server! (" + count++ + ")");
-                    out.println(gson.toJson(response));
+                if (message.getType() == RequestType.PING) {
+                    JsonElement res = JsonParser.parseString("Hi ");
+                    out.println(MessageCodec.encodeResponse(Response.ok("1",res)));
                 }
             }
         } catch (IOException e) {

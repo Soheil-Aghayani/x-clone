@@ -8,4 +8,5 @@ public enum RequestType {
     UPDATE_PROFILE,
     CREATE_TWEET,
     DELETE_TWEET,
+    PING,
 }

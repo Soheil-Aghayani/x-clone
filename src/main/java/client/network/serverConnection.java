@@ -1,7 +1,8 @@
 package client.network;
 
 import com.google.gson.Gson;
-import shared.protocol.message;
+import com.google.gson.JsonElement;
+import shared.protocol.*;
 
 import java.io.*;
 import java.net.Socket;
@@ -22,10 +23,11 @@ public class serverConnection {
         System.out.println("Connected to server.");
     }
 
-    public message sendMessage(message message) throws IOException {
-        out.println(gson.toJson(message));
+    public Response sendMessage(JsonElement message) throws IOException {
+        Request req = new Request("1", RequestType.PING, message);
+        out.println(MessageCodec.encodeRequest(req));
         String raw = in.readLine();
-        return gson.fromJson(raw, message.class);
+        return MessageCodec.decodeResponse(raw);
     }
 
     public void disconnect() throws IOException {

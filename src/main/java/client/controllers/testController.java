@@ -1,9 +1,11 @@
 package client.controllers;
 
 import client.network.serverConnection;
+import com.google.gson.JsonParser;
 import javafx.fxml.FXML;
 import javafx.scene.control.Label;
-import shared.protocol.message;
+import shared.protocol.Response;
+
 
 public class testController {
     @FXML
@@ -23,10 +25,8 @@ public class testController {
     @FXML
     private void handlePing() {
         try {
-            message response = connection.sendMessage(
-                    new message("ping", ""));
-            responseLabel.setText("Server says: "
-                    + response.getType() + " — " + response.getPayload());
+            Response response = connection.sendMessage(JsonParser.parseString("ping"));
+            responseLabel.setText("Server says: " + response.getPayload());
         } catch (Exception e) {
             responseLabel.setText("Error: " + e.getMessage());
         }
