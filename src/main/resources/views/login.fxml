@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox alignment="CENTER" spacing="20.0" style="-fx-background-color: #000000;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.loginController">
+    <padding>
+        <Insets bottom="40.0" left="40.0" right="40.0" top="40.0" />
+    </padding>
+    <children>
+        <!-- X Mock Text Logo -->
+        <Label text="𝕏" textFill="WHITE">
+            <font>
+                <Font name="System Bold" size="50.0" />
+            </font>
+        </Label>
+
+        <Label text="Sign in to 𝕏" textFill="WHITE">
+            <font>
+                <Font name="System Bold" size="22.0" />
+            </font>
+            <VBox.margin>
+                <Insets bottom="10.0" />
+            </VBox.margin>
+        </Label>
+
+        <!-- Input Fields -->
+        <TextField fx:id="usernameField" promptText="Username or email" minHeight="35.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
+
+        <PasswordField fx:id="passwordField" promptText="Password" minHeight="35.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
+
+        <!-- Action Button -->
+        <Button fx:id="loginButton" text="Log In" minHeight="40.0" maxWidth="Infinity" onAction="#handleLogin" style="-fx-background-color: #ffffff; -fx-text-fill: #000000; -fx-background-radius: 20; -fx-font-weight: bold;" />
+
+        <!-- Status & Error Label -->
+        <Label fx:id="errorLabel" textFill="#f4212e" wrapText="true">
+            <font>
+                <Font size="13.0" />
+            </font>
+        </Label>
+    </children>
+</VBox>
