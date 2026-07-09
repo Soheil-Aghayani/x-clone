@@ -101,4 +101,13 @@ public class loginController {
     private Response sendCustomRequest(Request req) throws Exception {
        return null; // Will hook into server connection once backend handler is synchronized
     }
+    
+    /**
+     * Triggered when user clicks 'Create account'. Routes the UI stage to register view.
+     */
+    @FXML
+    private void handleGoToRegister() {
+        System.out.println("Switching viewport to Register screen...");
+        // TODO: Implement Scene switcher pipeline here
+    }
 }
