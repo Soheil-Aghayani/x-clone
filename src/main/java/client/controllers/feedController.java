@@ -2,7 +2,6 @@ package client.controllers;
 
 import client.NavigationManager;
 import javafx.fxml.FXML;
-import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
@@ -10,7 +9,6 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import shared.models.Tweet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -78,7 +76,7 @@ public class feedController {
         // Metadata Header Row: Display Name -> Handle -> Timestamp
         HBox headerRow = new HBox(8);
 
-        Label displayName = new Label("Fatemeh");
+        Label displayName = new Label("Sample");
         displayName.setTextFill(Color.WHITE);
         displayName.setFont(Font.font("System", FontWeight.BOLD, 15));
 
@@ -120,5 +118,22 @@ public class feedController {
 
         // Inject the complete multi-row layout object inside the scrolling container viewport
         timelineContainer.getChildren().add(tweetRow);
+    }
+    /**
+     * Reroutes the application view context to the user's Profile screen layout.
+     */
+    @FXML
+    private void handleGoToProfile() {
+        System.out.println("Switching viewport to Profile view...");
+        // NavigationManager.switchScene("/views/profile.fxml"); (Will be active once profile layout is built)
+    }
+
+    /**
+     * Terminates session simulation context and rolls back_stage state to Login view.
+     */
+    @FXML
+    private void handleLogout() {
+        System.out.println("Invalidating active user context channel. Rerouting to login...");
+        client.NavigationManager.switchScene("/views/login.fxml");
     }
 }
