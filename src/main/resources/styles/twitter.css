@@ -1,0 +1,34 @@
+/* Root styling for the entire X Theme application */
+.root {
+    -fx-background-color: #000000;
+}
+
+/* Custom styling for TextFields matching X's borders */
+.text-field, .password-field {
+    -fx-background-color: #000000;
+    -fx-text-fill: #ffffff;
+    -fx-prompt-text-fill: #71767b;
+    -fx-border-color: #333333;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-highlight-fill: #1d9bf0;
+}
+
+/* Focused input state with active blue border */
+.text-field:focused, .password-field:focused {
+    -fx-border-color: #1d9bf0;
+}
+
+/* Rounded login button */
+.button {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #000000;
+    -fx-background-radius: 20px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+/* Hover effect for the main button */
+.button:hover {
+    -fx-background-color: #e6e6e6;
+}
