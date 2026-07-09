@@ -14,7 +14,7 @@ public class serverConnection {
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
-    private final Gson gson = new Gson();
+    //private final Gson gson = new Gson();
 
     public void connect() throws IOException {
         socket = new Socket(HOST, PORT);
@@ -23,14 +23,21 @@ public class serverConnection {
         System.out.println("Connected to server.");
     }
 
-    public Response sendMessage(JsonElement message) throws IOException {
-        Request req = new Request("1", RequestType.PING, message);
-        out.println(MessageCodec.encodeRequest(req));
-        String raw = in.readLine();
-        return MessageCodec.decodeResponse(raw);
+    public Response sendMessage(Request req) throws IOException {
+        //Encode the Request object
+        String jsonPayload = MessageCodec.encodeRequest(req);
+        out.println(jsonPayload);
+
+        //read the raw JSON response from the server input stream
+        String rawResponse = in.readLine();
+
+        //Decode the raw string back
+        return MessageCodec.decodeResponse(rawResponse);
     }
 
     public void disconnect() throws IOException {
-        socket.close();
+        if (socket != null && !socket.isClosed()) {
+            socket.close();
+        }
     }
 }
