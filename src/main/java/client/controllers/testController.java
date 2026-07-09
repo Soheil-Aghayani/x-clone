@@ -25,9 +25,19 @@ public class testController {
     @FXML
     private void handlePing() {
         try {
-            Response response = connection.sendMessage(JsonParser.parseString("ping"));
+            //Create a valid Request object for PING instead of raw JsonElement
+            java.util.UUID.randomUUID().toString();
+            shared.protocol.Request pingRequest = new shared.protocol.Request(
+                    java.util.UUID.randomUUID().toString(),
+                    shared.protocol.RequestType.PING,
+                    com.google.gson.JsonParser.parseString("\"ping\"")
+            );
+
+            //Pass the unified Request object to the updated network pipeline
+            Response response = connection.sendMessage(pingRequest);
             responseLabel.setText("Server says: " + response.getPayload());
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             responseLabel.setText("Error: " + e.getMessage());
         }
     }
