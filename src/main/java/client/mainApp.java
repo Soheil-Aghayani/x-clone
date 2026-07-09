@@ -9,9 +9,15 @@ public class mainApp extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-        FXMLLoader loader = new FXMLLoader(getClass().getResource("/views/login.fxml"));
+        // Register the active window stage to the global navigation routing system
+        NavigationManager.setStage(stage);
+
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/views/test.fxml"));
         stage.setScene(new Scene(loader.load(), 380, 480));
         stage.show();
+
+        // Boot directly into the default login layout sequence
+        NavigationManager.switchScene("/views/login.fxml");
     }
 
 }
