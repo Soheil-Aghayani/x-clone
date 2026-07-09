@@ -32,3 +32,12 @@
 .button:hover {
     -fx-background-color: #e6e6e6;
 }
+
+/* Custom borderless styling for X tweet compose box */
+.text-area {
+    -fx-background-color: #000000;
+    -fx-text-fill: #ffffff;
+}
+.text-area .content {
+    -fx-background-color: #000000;
+}
