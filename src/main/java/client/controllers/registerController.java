@@ -1,5 +1,6 @@
 package client.controllers;
 
+import client.NavigationManager;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -53,7 +54,6 @@ public class registerController {
      */
     @FXML
     private void handleBackToLogin() {
-        System.out.println("Rewinding pipeline back to active login viewport layout.");
-        // TODO: Mount scene execution framework context transition in next iteration phase
+        NavigationManager.switchScene("/views/login.fxml");
     }
 }
