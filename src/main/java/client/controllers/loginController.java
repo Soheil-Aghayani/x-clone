@@ -72,16 +72,21 @@ public class loginController {
             Response response = sendCustomRequest(loginRequest);
 
             // Step 5: Process Server Response
-            if (response.getStatus() == StatusCode.OK) {
-                errorLabel.setStyle("-fx-text-fill: #00ba7c;"); // X green for success
-                errorLabel.setText("Login successful! Redirecting...");
-                // TODO: Load dashboard/timeline view
-            }
-            else if (response.getStatus() == StatusCode.UNAUTHORIZED) {
-                errorLabel.setText("Invalid username or password.");
-            }
-            else {
-                errorLabel.setText("Server error: " + response.getStatus());
+            if (response != null) {
+                if (response.getStatus() == StatusCode.OK) {
+                    errorLabel.setStyle("-fx-text-fill: #00ba7c;"); // X green
+                    errorLabel.setText("Login successful! Redirecting...");
+                    // TODO: Route to timeline/feed screen
+                }
+                else if (response.getStatus() == StatusCode.UNAUTHORIZED) {
+                    errorLabel.setText("Invalid username or password.");
+                }
+                else if (response.getStatus() == StatusCode.NOT_FOUND) {
+                    errorLabel.setText("Account not found.");
+                }
+                else {
+                    errorLabel.setText("Server error: " + response.getStatus());
+                }
             }
 
         }
