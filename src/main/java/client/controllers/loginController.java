@@ -1,5 +1,6 @@
 package client.controllers;
 
+import client.NavigationManager;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -107,7 +108,6 @@ public class loginController {
      */
     @FXML
     private void handleGoToRegister() {
-        System.out.println("Switching viewport to Register screen...");
-        // TODO: Implement Scene switcher pipeline here
+        NavigationManager.switchScene("/views/register.fxml");
     }
 }
