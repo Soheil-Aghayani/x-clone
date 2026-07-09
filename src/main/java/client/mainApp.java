@@ -9,8 +9,8 @@ public class mainApp extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-        FXMLLoader loader = new FXMLLoader(getClass().getResource("/views/test.fxml"));
-        stage.setScene(new Scene(loader.load(), 400, 200));
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/views/login.fxml"));
+        stage.setScene(new Scene(loader.load(), 380, 480));
         stage.show();
     }
 
