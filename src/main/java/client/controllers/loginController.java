@@ -101,7 +101,7 @@ public class loginController {
     private Response sendCustomRequest(Request req) throws Exception {
        return null; // Will hook into server connection once backend handler is synchronized
     }
-    
+
     /**
      * Triggered when user clicks 'Create account'. Routes the UI stage to register view.
      */
