@@ -76,7 +76,7 @@
                                         <VBox spacing="1.0">
                                             <children>
                                                 <Label text="Sample" textFill="WHITE"><font><Font name="System Bold" size="20.0" /></font></Label>
-                                                <Label text="@developer" textFill="#71767b"><font><Font size="14.0" /></font></Label>
+                                                <Label text=" @developer" textFill="#71767b"><font><Font size="14.0" /></font></Label>
                                             </children>
                                         </VBox>
 
