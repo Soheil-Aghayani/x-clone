@@ -52,7 +52,7 @@ public class profileController {
         VBox contentStack = new VBox(4);
         HBox headerRow = new HBox(8);
 
-        Label displayName = new Label("Fatemeh");
+        Label displayName = new Label("Sample");
         displayName.setFont(Font.font("System", FontWeight.BOLD, 15));
         displayName.setTextFill(Color.WHITE);
 

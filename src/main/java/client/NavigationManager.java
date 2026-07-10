@@ -2,7 +2,7 @@ package client;
 
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
-import javafx.scene.layout.VBox;
+import javafx.scene.Parent;
 import javafx.stage.Stage;
 import java.io.IOException;
 
@@ -25,7 +25,7 @@ public class NavigationManager {
         try {
             // Load the target architectural design layout dynamically
             FXMLLoader loader = new FXMLLoader(NavigationManager.class.getResource(fxmlPath));
-            VBox rootContainer = loader.load();
+            Parent rootContainer = loader.load();
 
             // Re-bind the window scene content view tree context
             Scene newScene = new Scene(rootContainer);
