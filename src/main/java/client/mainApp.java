@@ -13,7 +13,7 @@ public class mainApp extends Application {
         NavigationManager.setStage(stage);
 
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/views/feed.fxml"));
-        stage.setScene(new Scene(loader.load(), 380, 4800));
+        stage.setScene(new Scene(loader.load(), 380, 480));
         stage.show();
 
         // Boot directly into the default login layout sequence
