@@ -53,6 +53,14 @@ public class loginController {
         String username = usernameField.getText().trim();
         String password = passwordField.getText();
 
+        // ----------------------------------------------------------------------
+        // DEVELOPMENT MOCK BYPASS: Lets you login instantly during frontend testing.
+        // Remove or comment this block out once the server/database is integrated.
+        System.out.println("Authentication bypass: Routing user to the main timeline feed...");
+        NavigationManager.switchScene("/views/feed.fxml");
+        if (true) return; // Safely halts further execution, isolating backend code
+        // ----------------------------------------------------------------------
+
         // Step 1: Client-side validation
         if (username.isEmpty() || password.isEmpty()) {
             errorLabel.setText("Please fill in all fields.");
@@ -77,7 +85,9 @@ public class loginController {
                 if (response.getStatus() == StatusCode.OK) {
                     errorLabel.setStyle("-fx-text-fill: #00ba7c;"); // X green
                     errorLabel.setText("Login successful! Redirecting...");
-                    // TODO: Route to timeline/feed screen
+
+                    // INSTALLED ROUTING LINK: Wired for real production integration
+                    NavigationManager.switchScene("/views/feed.fxml");
                 }
                 else if (response.getStatus() == StatusCode.UNAUTHORIZED) {
                     errorLabel.setText("Invalid username or password.");
