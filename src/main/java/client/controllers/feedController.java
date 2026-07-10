@@ -124,8 +124,8 @@ public class feedController {
      */
     @FXML
     private void handleGoToProfile() {
-        System.out.println("Switching viewport to Profile view...");
-        // NavigationManager.switchScene("/views/profile.fxml"); (Will be active once profile layout is built)
+        //System.out.println("Switching viewport to Profile view...");
+        NavigationManager.switchScene("/views/profile.fxml");
     }
 
     /**
