@@ -28,7 +28,7 @@ public class NavigationManager {
             Parent rootContainer = loader.load();
 
             // Re-bind the window scene content view tree context
-            Scene newScene = new Scene(rootContainer);
+            Scene newScene = new Scene(rootContainer, 600, 650);
             primaryStage.setScene(newScene);
 
         } catch (IOException e) {

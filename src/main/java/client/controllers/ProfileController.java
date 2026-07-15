@@ -12,7 +12,7 @@ import javafx.scene.text.FontWeight;
 import java.util.ArrayList;
 import java.util.List;
 
-public class profileController {
+public class ProfileController {
 
     @FXML
     private VBox userTweetsContainer;
@@ -83,7 +83,7 @@ public class profileController {
      */
     @FXML
     private void handleGoToHome() {
-        NavigationManager.switchScene("/views/feed.fxml");
+        NavigationManager.switchScene("/views/Feed.fxml");
     }
 
     /**
@@ -91,6 +91,6 @@ public class profileController {
      */
     @FXML
     private void handleLogout() {
-        NavigationManager.switchScene("/views/login.fxml");
+        NavigationManager.switchScene("/views/Login.fxml");
     }
 }

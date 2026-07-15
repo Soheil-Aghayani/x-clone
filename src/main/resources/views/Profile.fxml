@@ -9,7 +9,7 @@
 <?import javafx.scene.shape.Circle?>
 <?import javafx.scene.text.Font?>
 
-<HBox prefHeight="600.0" prefWidth="650.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.profileController">
+<HBox prefHeight="600.0" prefWidth="650.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.ProfileController">
     <children>
 
         <!-- Sidebar menu -->

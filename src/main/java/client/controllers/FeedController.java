@@ -13,7 +13,7 @@ import javafx.scene.text.FontWeight;
 import java.util.ArrayList;
 import java.util.List;
 
-public class feedController {
+public class FeedController {
 
     @FXML
     private TextArea tweetTextArea;
@@ -125,7 +125,7 @@ public class feedController {
     @FXML
     private void handleGoToProfile() {
         //System.out.println("Switching viewport to Profile view...");
-        NavigationManager.switchScene("/views/profile.fxml");
+        NavigationManager.switchScene("/views/Profile.fxml");
     }
 
     /**
@@ -134,6 +134,6 @@ public class feedController {
     @FXML
     private void handleLogout() {
         System.out.println("Invalidating active user context channel. Rerouting to login...");
-        client.NavigationManager.switchScene("/views/login.fxml");
+        client.NavigationManager.switchScene("/views/Login.fxml");
     }
 }

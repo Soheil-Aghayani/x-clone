@@ -8,15 +8,14 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import client.network.serverConnection;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import shared.protocol.Request;
 import shared.protocol.RequestType;
 import shared.protocol.Response;
 import shared.protocol.StatusCode;
-import shared.protocol.MessageCodec;
+
 import java.util.UUID;
 
-public class loginController {
+public class LoginController {
 
     // UI elements from FXML
     @FXML
@@ -57,7 +56,7 @@ public class loginController {
         // DEVELOPMENT MOCK BYPASS: Lets you login instantly during frontend testing.
         // Remove or comment this block out once the server/database is integrated.
         System.out.println("Authentication bypass: Routing user to the main timeline feed...");
-        NavigationManager.switchScene("/views/feed.fxml");
+        NavigationManager.switchScene("/views/Feed.fxml");
         if (true) return; // Safely halts further execution, isolating backend code
         // ----------------------------------------------------------------------
 
@@ -87,7 +86,7 @@ public class loginController {
                     errorLabel.setText("Login successful! Redirecting...");
 
                     // INSTALLED ROUTING LINK: Wired for real production integration
-                    NavigationManager.switchScene("/views/feed.fxml");
+                    NavigationManager.switchScene("/views/Feed.fxml");
                 }
                 else if (response.getStatus() == StatusCode.UNAUTHORIZED) {
                     errorLabel.setText("Invalid username or password.");
@@ -118,6 +117,6 @@ public class loginController {
      */
     @FXML
     private void handleGoToRegister() {
-        NavigationManager.switchScene("/views/register.fxml");
+        NavigationManager.switchScene("/views/Register.fxml");
     }
 }

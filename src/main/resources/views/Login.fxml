@@ -8,7 +8,7 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 
-<VBox alignment="CENTER" spacing="20.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.loginController">
+<VBox alignment="CENTER" prefHeight="650.0" prefWidth="600.0" spacing="20.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.LoginController">
     <padding>
         <Insets bottom="40.0" left="40.0" right="40.0" top="40.0" />
     </padding>
@@ -30,12 +30,12 @@
         </Label>
 
         <!-- Input Fields -->
-        <TextField fx:id="usernameField" promptText="Username or email" minHeight="35.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
+        <TextField fx:id="usernameField" promptText="Username or email" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
 
-        <PasswordField fx:id="passwordField" promptText="Password" minHeight="35.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
+        <PasswordField fx:id="passwordField" promptText="Password" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
 
         <!-- Action Button -->
-        <Button fx:id="loginButton" text="Log In" minHeight="40.0" maxWidth="Infinity" onAction="#handleLogin" style="-fx-background-color: #ffffff; -fx-text-fill: #000000; -fx-background-radius: 20; -fx-font-weight: bold;" />
+        <Button fx:id="loginButton" text="Log In" minHeight="40.0" maxWidth="300.0" onAction="#handleLogin" style="-fx-background-color: #ffffff; -fx-text-fill: #000000; -fx-background-radius: 20; -fx-font-weight: bold;" />
 
         <!-- Status & Error Label -->
         <Label fx:id="errorLabel" textFill="#f4212e" wrapText="true">
