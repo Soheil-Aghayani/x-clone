@@ -9,7 +9,7 @@
 <?import javafx.scene.shape.Circle?>
 <?import javafx.scene.text.Font?>
 
-<HBox prefHeight="600.0" prefWidth="650.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.ProfileController">
+<HBox prefHeight="650.0" prefWidth="600.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.ProfileController">
     <children>
 
         <!-- Sidebar menu -->
@@ -44,7 +44,7 @@
                         <!-- Username + post count -->
                         <VBox alignment="CENTER_LEFT">
                             <children>
-                                <Label text="Sample" textFill="WHITE"><font><Font name="System Bold" size="16.0" /></font></Label>
+                                <Label fx:id="headerNameLabel" text="Sample" textFill="WHITE"><font><Font name="System Bold" size="16.0" /></font></Label>
                                 <Label text="2 Posts" textFill="#71767b"><font><Font size="12.0" /></font></Label>
                             </children>
                         </VBox>
@@ -75,8 +75,8 @@
                                         <!-- Name + username -->
                                         <VBox spacing="1.0">
                                             <children>
-                                                <Label text="Sample" textFill="WHITE"><font><Font name="System Bold" size="20.0" /></font></Label>
-                                                <Label text=" @developer" textFill="#71767b"><font><Font size="14.0" /></font></Label>
+                                                <Label fx:id="nameLabel" text="Sample" textFill="WHITE"><font><Font name="System Bold" size="20.0" /></font></Label>
+                                                <Label fx:id="usernameLabel" text=" @developer" textFill="#71767b"><font><Font size="14.0" /></font></Label>
                                             </children>
                                         </VBox>
 

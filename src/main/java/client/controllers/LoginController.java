@@ -15,6 +15,8 @@ import shared.protocol.StatusCode;
 
 import java.util.UUID;
 
+import client.UserSession;
+
 public class LoginController {
 
     // UI elements from FXML
@@ -56,6 +58,8 @@ public class LoginController {
         // DEVELOPMENT MOCK BYPASS: Lets you login instantly during frontend testing.
         // Remove or comment this block out once the server/database is integrated.
         System.out.println("Authentication bypass: Routing user to the main timeline feed...");
+        // STAGING USER SESSION CONTEXT (to resolve feedback item 4)
+        UserSession.getInstance().startSession(username, "Sample User", "MOCK_JWT_TOKEN_12345");
         NavigationManager.switchScene("/views/Feed.fxml");
         if (true) return; // Safely halts further execution, isolating backend code
         // ----------------------------------------------------------------------

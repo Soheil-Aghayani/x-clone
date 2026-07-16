@@ -3,6 +3,7 @@ package client.controllers;
 import client.NavigationManager;
 import javafx.fxml.FXML;
 import javafx.scene.control.Label;
+import javafx.scene.control.Button;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -12,6 +13,8 @@ import javafx.scene.text.FontWeight;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import client.UserSession;
 
 public class FeedController {
 
@@ -38,6 +41,8 @@ public class FeedController {
         }
 
         System.out.println("Mock Pipeline: Staging new tweet -> " + content);
+        // Add the user's new tweet to the top of the timeline feed
+        renderAdvancedTweetCard(content);
         tweetTextArea.clear();
     }
 
@@ -76,11 +81,17 @@ public class FeedController {
         // Metadata Header Row: Display Name -> Handle -> Timestamp
         HBox headerRow = new HBox(8);
 
-        Label displayName = new Label("Sample");
+        // Dynamic configuration using the active user session context:
+        String activeName = UserSession.getInstance().getDisplayName();
+        if (activeName == null) activeName = "Guest";
+        Label displayName = new Label(activeName);
+
         displayName.setTextFill(Color.WHITE);
         displayName.setFont(Font.font("System", FontWeight.BOLD, 15));
 
-        Label userHandle = new Label("@developer");
+        String activeUsername = UserSession.getInstance().getUsername();
+        if (activeUsername == null) activeUsername = "developer";
+        Label userHandle = new Label("@" + activeUsername);
         userHandle.setTextFill(Color.web("#71767b"));
         userHandle.setFont(Font.font("System", 14));
 
@@ -92,7 +103,7 @@ public class FeedController {
 
         // Core Post Text Component
         Label bodyText = new Label(textContent);
-        bodyText.setTextFill(Color.web("#e7e9ea")); // 𝕏 primary text color
+        bodyText.setTextFill(Color.web("#e7e9ea"));
         bodyText.setFont(Font.font("System", 15));
         bodyText.setWrapText(true);
         bodyText.setMaxWidth(420);
@@ -107,10 +118,30 @@ public class FeedController {
         Label repostIcon = new Label("🔁 0");
         repostIcon.setTextFill(Color.web("#71767b"));
 
-        Label likeIcon = new Label("❤️ 0");
-        likeIcon.setTextFill(Color.web("#71767b"));
+        Button likeButton = new Button("❤️ 0");
+        likeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;");
 
-        actionToolbar.getChildren().addAll(replyIcon, repostIcon, likeIcon);
+        // Local atomic wrappers to host the current like status properties dynamically
+        final boolean[] isLiked = {false};
+        final int[] likeCount = {0};
+
+        // Click handler to instantly trigger state transitions on the UI thread without db blockades
+        likeButton.setOnAction(event -> {
+            if (!isLiked[0]) {
+                likeCount[0]++;
+                likeButton.setText("❤️ " + likeCount[0]);
+                likeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #f91880; -fx-padding: 0; -fx-cursor: hand;"); // X pinkish-red heart
+                isLiked[0] = true;
+            }
+            else {
+                likeCount[0]--;
+                likeButton.setText("🤍 " + likeCount[0]);
+                likeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;"); // Reset to default grey
+                isLiked[0] = false;
+            }
+        });
+
+        actionToolbar.getChildren().addAll(replyIcon, repostIcon, likeButton);
 
         // Assemble structural nodes into the stack context
         contentStack.getChildren().addAll(headerRow, bodyText, actionToolbar);
@@ -134,6 +165,8 @@ public class FeedController {
     @FXML
     private void handleLogout() {
         System.out.println("Invalidating active user context channel. Rerouting to login...");
+        // TERMINATING ACTIVE USER SESSION CONTEXT
+        UserSession.getInstance().clearSession();
         client.NavigationManager.switchScene("/views/Login.fxml");
     }
 }

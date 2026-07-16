@@ -12,14 +12,44 @@ import javafx.scene.text.FontWeight;
 import java.util.ArrayList;
 import java.util.List;
 
+import client.UserSession;
+
 public class ProfileController {
+    // Graphic fields from FXML file
+    @FXML
+    private Label headerNameLabel;
+
+    @FXML
+    private Label nameLabel;
+
+    @FXML
+    private Label usernameLabel;
 
     @FXML
     private VBox userTweetsContainer;
 
     @FXML
     public void initialize() {
-        // Load only the tweets belonging to this specific user profile context
+        // Taking users information from active session
+        String activeUsername = client.UserSession.getInstance().getUsername();
+        String activeDisplayName = client.UserSession.getInstance().getDisplayName();
+
+        // Filling the profile graphic labels with real information
+        if (activeDisplayName != null){
+            nameLabel.setText(activeDisplayName);
+            headerNameLabel.setText(activeDisplayName);
+        }
+        else {
+            nameLabel.setText("Active User");
+            headerNameLabel.setText("Active User");
+        }
+
+        if (activeUsername != null){
+            usernameLabel.setText("@" + activeUsername);
+        }
+        else {
+            usernameLabel.setText("@user");
+        }
         loadUserOwnTweets();
     }
 
@@ -91,6 +121,8 @@ public class ProfileController {
      */
     @FXML
     private void handleLogout() {
+        // TERMINATING ACTIVE USER SESSION CONTEXT
+        UserSession.getInstance().clearSession();
         NavigationManager.switchScene("/views/Login.fxml");
     }
 }
