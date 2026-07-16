@@ -31,7 +31,8 @@ public class FeedController {
     }
 
     /**
-     * Captures content from text-area context and clears the field buffer.
+     * Captures content from text-area context, appends it dynamically to the live UI,
+     * and clears the input field buffer.
      */
     @FXML
     private void handlePostTweet() {
@@ -40,9 +41,8 @@ public class FeedController {
             return;
         }
 
-        System.out.println("Mock Pipeline: Staging new tweet -> " + content);
-        // Add the user's new tweet to the top of the timeline feed
-        renderAdvancedTweetCard(content);
+        // Dynamically inject the newly composed tweet at the very top of the scrollable timeline
+        renderAdvancedTweetCard(content, "0s", 0, 0, 0);
         tweetTextArea.clear();
     }
 
@@ -53,17 +53,18 @@ public class FeedController {
         List<String> mockContents = new ArrayList<>();
         mockContents.add("Just deployed the new centralized Navigation Pipeline! Everything feels smooth. #JavaFX #XClone");
         mockContents.add("Designing atomic layouts with inline CSS components is highly efficient for dark themes.");
-
-        // Loop and isolate render calls
-        for (String content : mockContents) {
-            renderAdvancedTweetCard(content);
-        }
     }
 
     /**
-     * Constructs a high-fidelity X style tweet layout.
+     * Constructs a high-fidelity X style tweet layout with dynamic user metadata and fully interactive buttons.
+     *
+     * @param textContent  The core body text of the tweet
+     * @param timeAgo      Realistic timestamp representation (e.g., "now", "2h", "1d")
+     * @param initialLikes Starting counter value for the like action button
+     * @param initialReplies Starting counter value for the reply action button
+     * @param initialRetweets Starting counter value for the retweet action button
      */
-    private void renderAdvancedTweetCard(String textContent) {
+    private void renderAdvancedTweetCard(String textContent, String timeAgo, int initialLikes, int initialReplies, int initialRetweets) {
         // Main horizontal container to isolate profile picture from text context
         HBox tweetRow = new HBox(12);
         tweetRow.setStyle("-fx-border-color: #333333; -fx-border-width: 0 0 1 0; -fx-padding: 12 16 12 16;");
@@ -95,7 +96,7 @@ public class FeedController {
         userHandle.setTextFill(Color.web("#71767b"));
         userHandle.setFont(Font.font("System", 14));
 
-        Label timestamp = new Label("· 2h");
+        Label timestamp = new Label("· " + timeAgo);
         timestamp.setTextFill(Color.web("#71767b"));
         timestamp.setFont(Font.font("System", 14));
 
@@ -112,43 +113,74 @@ public class FeedController {
         HBox actionToolbar = new HBox(40);
         actionToolbar.setStyle("-fx-padding: 6 0 0 0;");
 
-        Label replyIcon = new Label("💬 0");
-        replyIcon.setTextFill(Color.web("#71767b"));
+        // MENTION BUTTON
+        Button replyButton = new Button("💬 " + initialReplies);
+        replyButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;");
+        final boolean[] isReplied = {false};
+        final int[] replyCount = {initialReplies};
+        replyButton.setOnAction(event -> {
+            if (!isReplied[0]) {
+                replyCount[0]++;
+                replyButton.setText("💬 " + replyCount[0]);
+                replyButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #1d9bf0; -fx-padding: 0; -fx-cursor: hand;"); // X blue color
+                isReplied[0] = true;
+            }
+            else {
+                replyCount[0]--;
+                replyButton.setText("💬 " + replyCount[0]);
+                replyButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;");
+                isReplied[0] = false;
+            }
+        });
 
-        Label repostIcon = new Label("🔁 0");
-        repostIcon.setTextFill(Color.web("#71767b"));
+        // RETWEET BUTTON
+        Button retweetButton = new Button("🔁 " + initialRetweets);
+        retweetButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;");
+        final boolean[] isRetweeted = {false};
+        final int[] retweetCount = {initialRetweets};
+        retweetButton.setOnAction(event -> {
+            if (!isRetweeted[0]) {
+                retweetCount[0]++;
+                retweetButton.setText("🔁 " + retweetCount[0]);
+                retweetButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #00ba7c; -fx-padding: 0; -fx-cursor: hand;"); // X green color
+                isRetweeted[0] = true;
+            }
+            else {
+                retweetCount[0]--;
+                retweetButton.setText("🔁 " + retweetCount[0]);
+                retweetButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;");
+                isRetweeted[0] = false;
+            }
+        });
 
-        Button likeButton = new Button("❤️ 0");
+        // LIKE BUTTON
+        Button likeButton = new Button("♡ " + initialLikes);
         likeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;");
-
-        // Local atomic wrappers to host the current like status properties dynamically
         final boolean[] isLiked = {false};
-        final int[] likeCount = {0};
-
-        // Click handler to instantly trigger state transitions on the UI thread without db blockades
+        final int[] likeCount = {initialLikes};
         likeButton.setOnAction(event -> {
             if (!isLiked[0]) {
                 likeCount[0]++;
-                likeButton.setText("❤️ " + likeCount[0]);
+                likeButton.setText("❤ " + likeCount[0]);
                 likeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #f91880; -fx-padding: 0; -fx-cursor: hand;"); // X pinkish-red heart
                 isLiked[0] = true;
             }
             else {
                 likeCount[0]--;
-                likeButton.setText("🤍 " + likeCount[0]);
-                likeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;"); // Reset to default grey
+                likeButton.setText("♡ " + likeCount[0]);
+                likeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #71767b; -fx-padding: 0; -fx-cursor: hand;");
                 isLiked[0] = false;
             }
         });
 
-        actionToolbar.getChildren().addAll(replyIcon, repostIcon, likeButton);
+        actionToolbar.getChildren().addAll(replyButton, retweetButton, likeButton);
 
         // Assemble structural nodes into the stack context
         contentStack.getChildren().addAll(headerRow, bodyText, actionToolbar);
         tweetRow.getChildren().addAll(avatarBox, contentStack);
 
-        // Inject the complete multi-row layout object inside the scrolling container viewport
-        timelineContainer.getChildren().add(tweetRow);
+        // Inject the  object inside the container SO new tweets appear at the top of the viewport
+        timelineContainer.getChildren().addFirst(tweetRow);
     }
     /**
      * Reroutes the application view context to the user's Profile screen layout.
