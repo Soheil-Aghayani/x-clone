@@ -1,11 +1,12 @@
 package client;
+import shared.models.User;
+import shared.models.Session;
 
 public class UserSession {
     private static UserSession instance;
 
-    private String username;
-    private String displayName;
-    private String token;
+    private User currentUser;
+    private Session currentSession;
 
     private UserSession() {}
 
@@ -22,25 +23,39 @@ public class UserSession {
     /**
      * Initializes user variables upon successful login or registration.
      */
-    public void startSession(String username, String displayName, String token) {
-        this.username = username;
-        this.displayName = displayName;
-        this.token = token;
-        System.out.println("Session Activated: Welcome @" + username + " (" + displayName + ")");
+    public void startSession(User user, Session session) {
+        this.currentUser = user;
+        this.currentSession = session;
+        if (user != null && session != null) {
+            System.out.println("Session Activated: Welcome @" + user.getUsername() + " (" + user.getDisplayName() + ")");
+            System.out.println("Token Secured in UI Context: [" + session.getToken() + "]");
+        }
     }
 
     /**
-     * Clears all reference pointers during logout cycles to secure context.
+     * Purges all reference pointers upon logout to secure application state.
      */
     public void clearSession() {
-        System.out.println("Session Terminated: @" + this.username + " logged out safely.");
-        this.username = null;
-        this.displayName = null;
-        this.token = null;
+        if (this.currentUser != null) {
+            System.out.println("Session Terminated: @" + this.currentUser.getUsername() + " logged out safely.");
+        }
+        this.currentUser = null;
+        this.currentSession = null;
     }
 
-    public String getUsername() { return username; }
-    public String getDisplayName() { return displayName; }
-    public String getToken() { return token; }
-}
+    // Helper utilities to cleanly request fields across FX controllers
+    public String getUsername() {
+        return currentUser != null ? currentUser.getUsername() : null;
+    }
 
+    public String getDisplayName() {
+        return currentUser != null ? currentUser.getDisplayName() : null;
+    }
+
+    public String getToken() {
+        return currentSession != null ? currentSession.getToken() : null;
+    }
+
+    public User getCurrentUser() { return currentUser; }
+    public Session getCurrentSession() { return currentSession; }
+}

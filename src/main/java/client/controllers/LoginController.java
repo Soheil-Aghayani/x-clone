@@ -55,13 +55,19 @@ public class LoginController {
         String password = passwordField.getText();
 
         // ----------------------------------------------------------------------
-        // DEVELOPMENT MOCK BYPASS: Lets you login instantly during frontend testing.
-        // Remove or comment this block out once the server/database is integrated.
-        System.out.println("Authentication bypass: Routing user to the main timeline feed...");
-        // STAGING USER SESSION CONTEXT (to resolve feedback item 4)
-        UserSession.getInstance().startSession(username, "Sample User", "MOCK_JWT_TOKEN_12345");
+        // DEVELOPMENT MOCK BYPASS: Active for offline visual compilation tasks
+        // ----------------------------------------------------------------------
+        System.out.println("Authentication bypass: Staging session context tracking...");
+
+        // Generating official model frames populated with mock properties
+        shared.models.User mockUser = new shared.models.User(1, username, username + "@example.com", "Sample User", "Bio Details", null, null, "2026-01-01");
+        shared.models.Session mockSession = new shared.models.Session(101, 1, "MOCK_JWT_TOKEN_12345", "2026-12-31");
+
+        // Passing the unified models directly into the client UI session pipeline
+        UserSession.getInstance().startSession(mockUser, mockSession);
+
         NavigationManager.switchScene("/views/Feed.fxml");
-        if (true) return; // Safely halts further execution, isolating backend code
+        if (true) return;
         // ----------------------------------------------------------------------
 
         // Step 1: Client-side validation
@@ -86,10 +92,9 @@ public class LoginController {
             // Step 5: Process Server Response
             if (response != null) {
                 if (response.getStatus() == StatusCode.OK) {
-                    errorLabel.setStyle("-fx-text-fill: #00ba7c;"); // X green
+                    errorLabel.setStyle("-fx-text-fill: #00ba7c;");
                     errorLabel.setText("Login successful! Redirecting...");
 
-                    // INSTALLED ROUTING LINK: Wired for real production integration
                     NavigationManager.switchScene("/views/Feed.fxml");
                 }
                 else if (response.getStatus() == StatusCode.UNAUTHORIZED) {
