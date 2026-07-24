@@ -23,8 +23,13 @@ class NpcReplyPolicyTest {
     static void startJavaFxAndIsolateState() throws Exception {
         System.setProperty("xclone.data.dir", temporaryDirectory.toString());
         CountDownLatch started = new CountDownLatch(1);
-        Platform.startup(started::countDown);
-        assertTrue(started.await(5, TimeUnit.SECONDS));
+        try {
+            Platform.startup(started::countDown);
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+        } catch (IllegalStateException alreadyStarted) {
+            // UI tests share a single JavaFX toolkit and may run in any order.
+        }
+        Platform.setImplicitExit(false);
     }
 
     @Test
