@@ -5,52 +5,50 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
-<?import javafx.scene.text.Font?>
 
-<VBox alignment="CENTER" prefHeight="650.0" prefWidth="600.0" spacing="20.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.LoginController">
-    <padding>
-        <Insets bottom="40.0" left="40.0" right="40.0" top="40.0" />
-    </padding>
-    <children>
-        <!-- X Mock Text Logo -->
-        <Label text="𝕏" textFill="WHITE">
-            <font>
-                <Font name="System Bold" size="50.0" />
-            </font>
-        </Label>
+<StackPane prefHeight="700.0" prefWidth="600.0" style="-fx-background-color: #000000;" styleClass="auth-shell"
+           stylesheets="@../styles/twitter.css"
+           xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="client.controllers.LoginController">
+    <VBox alignment="TOP_LEFT" maxWidth="440.0" prefWidth="440.0" spacing="18.0" styleClass="auth-card">
+        <padding><Insets bottom="44.0" left="44.0" right="44.0" top="28.0" /></padding>
 
-        <Label text="Sign in to 𝕏" textFill="WHITE">
-            <font>
-                <Font name="System Bold" size="22.0" />
-            </font>
-            <VBox.margin>
-                <Insets bottom="10.0" />
-            </VBox.margin>
-        </Label>
+        <HBox alignment="CENTER" minHeight="42.0">
+            <Label fx:id="authLogo" styleClass="auth-logo" />
+        </HBox>
 
-        <!-- Input Fields -->
-        <TextField fx:id="usernameField" promptText="Username or email" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
+        <Label text="Sign in to X" styleClass="auth-title" />
 
-        <PasswordField fx:id="passwordField" promptText="Password" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
 
-        <!-- Action Button -->
-        <Button fx:id="loginButton" text="Log In" minHeight="40.0" maxWidth="300.0" onAction="#handleLogin" style="-fx-background-color: #ffffff; -fx-text-fill: #000000; -fx-background-radius: 20; -fx-font-weight: bold;" />
 
-        <!-- Status & Error Label -->
-        <Label fx:id="errorLabel" textFill="#f4212e" wrapText="true">
-            <font>
-                <Font size="13.0" />
-            </font>
-        </Label>
-        <Label text="Don't have an account?" textFill="#71767b">
-            <font>
-                <Font size="14.0" />
-            </font>
-            <VBox.margin>
-                <Insets top="15.0" />
-            </VBox.margin>
-        </Label>
-        <Button fx:id="goToRegisterButton" text="Create account" onAction="#handleGoToRegister" style="-fx-background-color: transparent; -fx-text-fill: #1d9bf0; -fx-font-weight: bold; -fx-underline: true; -fx-cursor: hand;" />
-    </children>
-</VBox>
+        <TextField fx:id="usernameField" promptText="Phone, email, or username" maxWidth="Infinity"
+                   onAction="#focusPassword" styleClass="auth-field" />
+        <StackPane maxWidth="Infinity">
+            <PasswordField fx:id="passwordField" promptText="Password" maxWidth="Infinity"
+                           onAction="#handleLogin" styleClass="auth-field,password-entry" />
+            <TextField fx:id="visiblePasswordField" promptText="Password" maxWidth="Infinity"
+                       visible="false" managed="false" onAction="#handleLogin"
+                       styleClass="auth-field,password-entry" />
+            <Button fx:id="passwordVisibilityButton" onAction="#togglePasswordVisibility"
+                    StackPane.alignment="CENTER_RIGHT" styleClass="password-visibility-button">
+                <StackPane.margin><Insets right="11.0" /></StackPane.margin>
+            </Button>
+        </StackPane>
+
+        <Button fx:id="loginButton" text="Sign in" maxWidth="Infinity" onAction="#handleLogin"
+                styleClass="auth-primary-button" />
+        <Button text="Forgot password?" maxWidth="Infinity" onAction="#handleForgotPassword"
+                styleClass="auth-secondary-button" />
+
+        <Label fx:id="errorLabel" minHeight="34.0" maxWidth="Infinity" wrapText="true" styleClass="auth-error" />
+
+        <HBox alignment="CENTER_LEFT" spacing="4.0">
+            <Label text="Don't have an account?" styleClass="auth-muted" />
+            <Button fx:id="goToRegisterButton" text="Sign up" onAction="#handleGoToRegister" styleClass="auth-link-button" />
+        </HBox>
+    </VBox>
+</StackPane>

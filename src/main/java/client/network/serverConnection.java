@@ -1,43 +1,60 @@
 package client.network;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import shared.protocol.*;
+import shared.protocol.MessageCodec;
+import shared.protocol.Request;
+import shared.protocol.Response;
 
-import java.io.*;
-import java.net.Socket;
+import java.io.IOException;
+import java.net.ConnectException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 
 public class serverConnection {
-    private static final String HOST = "localhost";
-    private static final int PORT = 8080;
+    private final HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(4))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
 
-    private Socket socket;
-    private PrintWriter out;
-    private BufferedReader in;
-    //private final Gson gson = new Gson();
-
-    public void connect() throws IOException {
-        socket = new Socket(HOST, PORT);
-        out = new PrintWriter(socket.getOutputStream(), true);
-        in  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        System.out.println("Connected to server.");
-    }
-
-    public Response sendMessage(Request req) throws IOException {
-        //Encode the Request object
-        String jsonPayload = MessageCodec.encodeRequest(req);
-        out.println(jsonPayload);
-
-        //read the raw JSON response from the server input stream
-        String rawResponse = in.readLine();
-
-        //Decode the raw string back
-        return MessageCodec.decodeResponse(rawResponse);
-    }
-
-    public void disconnect() throws IOException {
-        if (socket != null && !socket.isClosed()) {
-            socket.close();
+    public synchronized void connect() throws IOException {
+        HttpRequest request = HttpRequest.newBuilder(ServerEndpoint.healthUri())
+                .timeout(Duration.ofSeconds(6))
+                .GET()
+                .build();
+        try {
+            HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
+            if (response.statusCode() != 200) {
+                throw new ConnectException("Backend health check returned HTTP " + response.statusCode());
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Backend health check was interrupted", exception);
         }
+    }
+
+    public synchronized Response sendMessage(Request requestMessage) throws IOException {
+        HttpRequest request = HttpRequest.newBuilder(ServerEndpoint.apiUri())
+                .timeout(Duration.ofSeconds(10))
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json; charset=UTF-8")
+                .POST(HttpRequest.BodyPublishers.ofString(MessageCodec.encodeRequest(requestMessage)))
+                .build();
+        try {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.body() == null || response.body().isBlank()) {
+                throw new IOException("Backend returned an empty response (HTTP " + response.statusCode() + ")");
+            }
+            Response decoded = MessageCodec.decodeResponse(response.body());
+            if (decoded == null) throw new IOException("Backend returned invalid JSON");
+            return decoded;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Backend request was interrupted", exception);
+        }
+    }
+
+    public synchronized void disconnect() {
+        // HttpClient manages pooled HTTPS connections and needs no explicit close.
     }
 }

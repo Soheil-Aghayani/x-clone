@@ -44,3 +44,15 @@ build/
 .mvn/
 mvnw
 mvnw.cmd
+
+### Local secrets and runtime data ###
+.env
+.env.*
+!.env.example
+server-url.txt
+*.log
+.x-clone/
+.x-clone-server/
+*.db
+*.db-shm
+*.db-wal

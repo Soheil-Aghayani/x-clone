@@ -10,6 +10,10 @@ public class User {
     private String avatarUrl;
     private String bannerUrl;
     private String createdAt;
+    private String location;
+    private String website;
+    private String birthDate;
+    private boolean professional;
 
     public User(){}
 
@@ -33,10 +37,18 @@ public class User {
     public String getAvatarUrl() { return avatarUrl; }
     public String getBannerUrl() { return bannerUrl; }
     public String getCreatedAt() { return createdAt; }
+    public String getLocation() { return location; }
+    public String getWebsite() { return website; }
+    public String getBirthDate() { return birthDate; }
+    public boolean isProfessional() { return professional; }
 
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public void setBio(String bio) { this.bio = bio; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
     public void setBannerUrl(String bannerUrl) { this.bannerUrl = bannerUrl; }
+    public void setLocation(String location) { this.location = location; }
+    public void setWebsite(String website) { this.website = website; }
+    public void setBirthDate(String birthDate) { this.birthDate = birthDate; }
+    public void setProfessional(boolean professional) { this.professional = professional; }
 
 }

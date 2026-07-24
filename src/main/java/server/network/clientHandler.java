@@ -1,20 +1,20 @@
 package server.network;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
+import server.service.ApiService;
 import shared.protocol.MessageCodec;
 import shared.protocol.Request;
-import shared.protocol.RequestType;
 import shared.protocol.Response;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.Socket;
-import java.security.MessageDigest;
 
+/** Legacy socket adapter retained for source compatibility. New clients use HTTPS. */
 public class clientHandler implements Runnable {
     private final Socket socket;
-    private final Gson gson = new Gson();
+    private final ApiService api = new ApiService();
 
     public clientHandler(Socket socket) {
         this.socket = socket;
@@ -23,23 +23,17 @@ public class clientHandler implements Runnable {
     @Override
     public void run() {
         try (
-                BufferedReader in = new BufferedReader(
-                        new InputStreamReader(socket.getInputStream()));
-                PrintWriter out = new PrintWriter(
-                        socket.getOutputStream(), true)
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
         ) {
             String raw;
             while ((raw = in.readLine()) != null) {
                 Request message = MessageCodec.decodeRequest(raw);
-                System.out.println("Received: " + message.getType());
-
-                if (message.getType() == RequestType.PING) {
-                    JsonElement res = JsonParser.parseString("Hi ");
-                    out.println(MessageCodec.encodeResponse(Response.ok("1",res)));
-                }
+                Response response = api.handle(message);
+                out.println(MessageCodec.encodeResponse(response));
             }
-        } catch (IOException e) {
-            System.out.println("Client disconnected.");
+        } catch (IOException exception) {
+            System.out.println("Legacy socket client disconnected.");
         }
     }
 }

@@ -5,46 +5,52 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
-<?import javafx.scene.text.Font?>
 
-<VBox alignment="CENTER" prefHeight="650.0" prefWidth="600.0" spacing="15.0" style="-fx-background-color: #000000;" stylesheets="@../styles/twitter.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="client.controllers.RegisterController">
-    <padding>
-        <Insets bottom="30.0" left="40.0" right="40.0" top="30.0" />
-    </padding>
-    <children>
-        <!-- Twitter/X logo -->
-        <Label text="𝕏" textFill="WHITE">
-            <font>
-                <Font name="System Bold" size="40.0" />
-            </font>
-        </Label>
-        <!-- Page title -->
-        <Label text="Create your account" textFill="WHITE">
-            <font>
-                <Font name="System Bold" size="22.0" />
-            </font>
-            <VBox.margin>
-                <Insets bottom="10.0" />
-            </VBox.margin>
-        </Label>
-        <!-- Input fields -->
-        <TextField fx:id="displayNameField" promptText="Display Name" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
-        <TextField fx:id="usernameField" promptText="Username" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
-        <TextField fx:id="emailField" promptText="Email address" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
-        <PasswordField fx:id="passwordField" promptText="Password" minHeight="35.0" maxWidth="300.0" style="-fx-background-color: #000000; -fx-text-inner-color: white; -fx-border-color: #333333; -fx-border-radius: 5; -fx-prompt-text-fill: #71767b;" />
+<StackPane prefHeight="700.0" prefWidth="600.0" style="-fx-background-color: #000000;" styleClass="auth-shell"
+           stylesheets="@../styles/twitter.css"
+           xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="client.controllers.RegisterController">
+    <VBox alignment="TOP_LEFT" maxWidth="460.0" prefWidth="460.0" spacing="15.0" styleClass="auth-card">
+        <padding><Insets bottom="30.0" left="42.0" right="42.0" top="22.0" /></padding>
 
-        <!-- Sign Up button -->
-        <Button fx:id="registerButton" text="Sign Up" minHeight="40.0" maxWidth="300" onAction="#handleRegister" style="-fx-background-color: #ffffff; -fx-text-fill: #000000; -fx-background-radius: 20; -fx-font-weight: bold;" />
+        <HBox alignment="CENTER_LEFT" minHeight="42.0">
+            <Button fx:id="backButton" onAction="#handleBackToLogin" styleClass="auth-close-button" />
+            <Region HBox.hgrow="ALWAYS" />
+            <Label fx:id="authLogo" styleClass="auth-logo" />
+            <Region HBox.hgrow="ALWAYS" />
+            <Region minWidth="40.0" />
+        </HBox>
 
-        <!-- Error message label -->
-        <Label fx:id="errorLabel" textFill="#f4212e" wrapText="true">
-            <font>
-                <Font size="13.0" />
-            </font>
-        </Label>
+        <Label text="Create your account" styleClass="auth-title" />
+        <Label text="Join the conversation. You can change these details later." wrapText="true" styleClass="auth-muted" />
 
-        <!-- Button to navigate back to login page -->
-        <Button text="Already have an account? Log in" onAction="#handleBackToLogin" style="-fx-background-color: transparent; -fx-text-fill: #1d9bf0; -fx-underline: true; -fx-cursor: hand;" />
-    </children>
-</VBox>
+        <TextField fx:id="displayNameField" promptText="Name" maxWidth="Infinity" styleClass="auth-field" />
+        <TextField fx:id="usernameField" promptText="Username" maxWidth="Infinity" styleClass="auth-field" />
+        <TextField fx:id="emailField" promptText="Email" maxWidth="Infinity" styleClass="auth-field" />
+        <StackPane maxWidth="Infinity">
+            <PasswordField fx:id="passwordField" promptText="Password (6 characters minimum)" maxWidth="Infinity"
+                           onAction="#handleRegister" styleClass="auth-field,password-entry" />
+            <TextField fx:id="visiblePasswordField" promptText="Password (6 characters minimum)" maxWidth="Infinity"
+                       visible="false" managed="false" onAction="#handleRegister"
+                       styleClass="auth-field,password-entry" />
+            <Button fx:id="passwordVisibilityButton" onAction="#togglePasswordVisibility"
+                    StackPane.alignment="CENTER_RIGHT" styleClass="password-visibility-button">
+                <StackPane.margin><Insets right="11.0" /></StackPane.margin>
+            </Button>
+        </StackPane>
+
+        <Label text="By signing up, you agree to the Terms of Service and Privacy Policy." wrapText="true" styleClass="auth-legal" />
+        <Label fx:id="errorLabel" minHeight="32.0" maxWidth="Infinity" wrapText="true" styleClass="auth-error" />
+
+        <Button fx:id="registerButton" text="Create account" maxWidth="Infinity" onAction="#handleRegister"
+                styleClass="auth-primary-button" />
+        <HBox alignment="CENTER" spacing="4.0">
+            <Label text="Already have an account?" styleClass="auth-muted" />
+            <Button text="Sign in" onAction="#handleBackToLogin" styleClass="auth-link-button" />
+        </HBox>
+    </VBox>
+</StackPane>

@@ -1,12 +1,20 @@
 package client.controllers;
 
+import client.AppFonts;
+import client.AppIcons;
 import client.NavigationManager;
+import client.UserSession;
 import client.network.serverConnection;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import shared.models.Session;
+import shared.models.User;
 import shared.protocol.Request;
 import shared.protocol.RequestType;
 import shared.protocol.Response;
@@ -15,112 +23,165 @@ import shared.protocol.StatusCode;
 import java.util.UUID;
 
 public class RegisterController {
+    @FXML private Label authLogo;
+    @FXML private Button backButton;
+    @FXML private TextField displayNameField;
+    @FXML private TextField usernameField;
+    @FXML private TextField emailField;
+    @FXML private PasswordField passwordField;
+    @FXML private TextField visiblePasswordField;
+    @FXML private Button passwordVisibilityButton;
+    @FXML private Button registerButton;
+    @FXML private Label errorLabel;
 
-    @FXML
-    private TextField displayNameField;
-
-    @FXML
-    private TextField usernameField;
-
-    @FXML
-    private TextField emailField;
-
-    @FXML
-    private PasswordField passwordField;
-
-    @FXML
-    private Label errorLabel;
-
-    // Isolated network connection context for this screen
     private final serverConnection connection = new serverConnection();
+    private boolean submitting;
+    private boolean passwordVisible;
 
-    /**
-     * Extracts inputs, packs them into a standard JSON payload, and requests remote account creation.
-     */
+    @FXML
+    public void initialize() {
+        authLogo.setGraphic(AppIcons.icon("x-logo-icon.svg", 31, "#e7e9ea"));
+        backButton.setText("×");
+        visiblePasswordField.textProperty().bindBidirectional(passwordField.textProperty());
+        for (TextField field : new TextField[]{displayNameField, usernameField, emailField, passwordField, visiblePasswordField}) {
+            field.textProperty().addListener((observable, oldText, newText) -> field.setFont(AppFonts.fontFor(newText, 16)));
+        }
+        updatePasswordVisibility();
+    }
+
+    @FXML
+    private void togglePasswordVisibility() {
+        TextField previous = activePasswordField();
+        int caret = previous.getCaretPosition();
+        passwordVisible = !passwordVisible;
+        updatePasswordVisibility();
+        TextField active = activePasswordField();
+        active.requestFocus();
+        active.positionCaret(Math.min(caret, active.getLength()));
+    }
+
     @FXML
     private void handleRegister() {
+        if (submitting) return;
         String displayName = displayNameField.getText().trim();
         String username = usernameField.getText().trim();
         String email = emailField.getText().trim();
         String password = passwordField.getText();
 
-        // Client-side structural integrity check (Keeps faults isolated to client)
-        if (displayName.isEmpty() || username.isEmpty() || email.isEmpty() || password.isEmpty()) {
-            errorLabel.setText("Please populate all fields before proceeding.");
+        if (displayName.isEmpty() || username.isEmpty() || email.isEmpty()) {
+            showError("Complete every field to create your account.");
+            return;
+        }
+        if (!email.contains("@") || email.startsWith("@") || email.endsWith("@")) {
+            showError("Enter a valid email address.");
+            return;
+        }
+        if (!username.matches("[A-Za-z0-9_]{1,15}")) {
+            showError("Username must be 1–15 letters, numbers, or underscores.");
+            return;
+        }
+        if (password.length() < 6) {
+            showError("Password must contain at least 6 characters.");
             return;
         }
 
-        System.out.println("Registration bypass: Routing user to the main timeline feed...");
-        NavigationManager.switchScene("/views/feed.fxml");
-        if (true) return;
+        JsonObject payload = new JsonObject();
+        payload.addProperty("displayName", displayName);
+        payload.addProperty("username", username);
+        payload.addProperty("email", email);
+        payload.addProperty("password", password);
+        Request request = new Request(UUID.randomUUID().toString(), RequestType.REGISTER, payload);
 
-        // ----------------------------------------------------------------------
-        // DEVELOPMENT MOCK BYPASS: Active for offline visual compilation tasks
-        // ----------------------------------------------------------------------
-        System.out.println("Registration bypass: Staging session context tracking...");
+        setBusy(true, "Creating account…");
+        Task<Response> task = new Task<>() {
+            @Override protected Response call() throws Exception { return connection.sendMessage(request); }
+        };
+        task.setOnSucceeded(event -> handleResponse(task.getValue()));
+        task.setOnFailed(event -> {
+            setBusy(false, "Create account");
+            showError("We couldn't reach the backend. Check that the server is running and try again.");
+        });
+        Thread thread = new Thread(task, "x-register-request");
+        thread.setDaemon(true);
+        thread.start();
+    }
 
-        // Generating official model frames populated with registration inputs
-        shared.models.User newUser = new shared.models.User(2, username, email, displayName, "Hello 𝕏!", null, null, "2026-07-16");
-        shared.models.Session newSession = new shared.models.Session(102, 2, "MOCK_JWT_TOKEN_67890", "2026-12-31");
-
-        // Staging user credentials instantly inside the active UI memory channel
-        client.UserSession.getInstance().startSession(newUser, newSession);
-
-        NavigationManager.switchScene("/views/Feed.fxml");
-        if (true) return;
-        // ----------------------------------------------------------------------
-
-        try {
-            // Package registration data into a uniform JSON object payload
-            JsonObject registerPayload = new JsonObject();
-            registerPayload.addProperty("displayName", displayName);
-            registerPayload.addProperty("username", username);
-            registerPayload.addProperty("email", email);
-            registerPayload.addProperty("password", password);
-
-            // Wrap inside the unified architecture Request object
-            String uniqueId = UUID.randomUUID().toString();
-            Request registerRequest = new Request(uniqueId, RequestType.REGISTER, registerPayload);
-
-            // Establish standard connection bridge
-            connection.connect();
-
-            // Dispatch request through the client connection pipeline
-            Response response = connection.sendMessage(registerRequest);
-
-            // Process standard response status codes from network protocol
-            if (response != null) {
-                if (response.getStatus() == StatusCode.OK) {
-                    errorLabel.setStyle("-fx-text-fill: #00ba7c;");
-                    errorLabel.setText("Account created successfully! Welcome ...");
-                    // Reroute to login context so user can authenticate
-                    NavigationManager.switchScene("/views/Feed.fxml");
-                }
-                else if (response.getStatus() == StatusCode.BAD_REQUEST) {
-                    errorLabel.setText("Registration rejected: Username or email already exists.");
-                }
-                else {
-                    errorLabel.setText("System status code: " + response.getStatus());
-                }
-            }
-
+    private void handleResponse(Response response) {
+        if (response == null) {
+            setBusy(false, "Create account");
+            showError("The backend closed the connection. Please try again.");
+            return;
         }
-        catch (Exception e) {
-            // If server is not running or network fails, display a generic message to user
-            errorLabel.setText("Network transmission offline. Local simulation active.");
-            System.out.println("Network info: Server response handler might be pending or offline.");
-        }
-        finally {
+        if (response.getStatus() == StatusCode.OK && response.getPayload() != null) {
             try {
-                connection.disconnect();
+                JsonObject payload = response.getPayload().getAsJsonObject();
+                Gson gson = new Gson();
+                User user = gson.fromJson(payload.get("user"), User.class);
+                Session session = gson.fromJson(payload.get("session"), Session.class);
+                UserSession.getInstance().startSession(user, session);
+                showSuccess("Account created. Loading X…");
+                if (!NavigationManager.switchScene("/views/Feed.fxml")) {
+                    UserSession.getInstance().clearSession();
+                    setBusy(false, "Create account");
+                    showError("Your account was created, but Home could not be opened.");
+                }
+                return;
+            } catch (RuntimeException exception) {
+                setBusy(false, "Create account");
+                showError("The backend returned an invalid account response.");
+                return;
             }
-            catch (Exception ignored) {}
+        }
+
+        setBusy(false, "Create account");
+        if (response.getStatus() == StatusCode.CONFLICT) {
+            showError("That username or email is already in use.");
+        } else {
+            showError(response.getMessage() == null ? "Account creation failed." : response.getMessage());
         }
     }
 
-    /**
-     * Reroutes view state contexts backward into the Authentication (Login) UI stage tree.
-     */
+    private void setBusy(boolean busy, String text) {
+        submitting = busy;
+        registerButton.setDisable(busy);
+        registerButton.setText(text);
+        displayNameField.setDisable(busy);
+        usernameField.setDisable(busy);
+        emailField.setDisable(busy);
+        passwordField.setDisable(busy);
+        visiblePasswordField.setDisable(busy);
+        passwordVisibilityButton.setDisable(busy);
+    }
+
+    private TextField activePasswordField() {
+        return passwordVisible ? visiblePasswordField : passwordField;
+    }
+
+    private void updatePasswordVisibility() {
+        passwordField.setVisible(!passwordVisible);
+        passwordField.setManaged(!passwordVisible);
+        visiblePasswordField.setVisible(passwordVisible);
+        visiblePasswordField.setManaged(passwordVisible);
+        passwordVisibilityButton.setGraphic(AppIcons.icon(
+                passwordVisible ? "eye-hide-icon.svg" : "eye-show-icon.svg",
+                20,
+                "#71767b"
+        ));
+        passwordVisibilityButton.setAccessibleText(passwordVisible ? "Hide password" : "Show password");
+    }
+
+    private void showError(String message) {
+        errorLabel.getStyleClass().remove("auth-error-success");
+        errorLabel.setText(message);
+    }
+
+    private void showSuccess(String message) {
+        if (!errorLabel.getStyleClass().contains("auth-error-success")) {
+            errorLabel.getStyleClass().add("auth-error-success");
+        }
+        errorLabel.setText(message);
+    }
+
     @FXML
     private void handleBackToLogin() {
         NavigationManager.switchScene("/views/Login.fxml");
