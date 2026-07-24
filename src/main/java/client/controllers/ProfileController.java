@@ -26,6 +26,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.Node;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
@@ -441,6 +442,9 @@ public class ProfileController {
                 post.getAuthorUsername(),
                 openAuthor
         );
+        markPostLink(avatar);
+        markPostLink(name);
+        markPostLink(handle);
         Label time = new Label();
         time.setTextFill(Color.web("#536471"));
         time.textProperty().bind(Bindings.createStringBinding(() -> "· " + postStore.relativeTime(post), postStore.clockProperty()));
@@ -465,13 +469,13 @@ public class ProfileController {
                 replyingTo.setFont(AppFonts.fontFor(replyingTo.getText(), 14));
                 replyingTo.setStyle("-fx-cursor: hand;");
                 replyingTo.setOnMouseClicked(event -> openProfile(original.getAuthorUsername()));
+                markPostLink(replyingTo);
                 content.getChildren().add(replyingTo);
             }
         }
         if (!post.getContent().isBlank()) {
             TextFlow body = createContent(post.getContent());
             body.setStyle("-fx-cursor: hand;");
-            body.setOnMouseClicked(event -> openPostDetail(post.getId()));
             content.getChildren().add(body);
         }
         if (post.getMediaUri() != null) {
@@ -481,7 +485,6 @@ public class ProfileController {
                 image.setFitWidth(480);
                 image.setFitHeight(320);
                 image.setPreserveRatio(true);
-                image.setOnMouseClicked(event -> openPostDetail(post.getId()));
                 content.getChildren().add(image);
             } else {
                 Label unavailable = new Label("Media unavailable · " + MediaLibrary.displayName(post.getMediaUri())
@@ -495,7 +498,12 @@ public class ProfileController {
         }
         if (post.getQuotedPostId() != null) {
             Post quoted = postStore.getPost(post.getQuotedPostId());
-            if (quoted != null) content.getChildren().add(PostComposerDialog.createPostPreview(quoted));
+            if (quoted != null) {
+                Node preview = PostComposerDialog.createPostPreview(quoted);
+                markPostLink(preview);
+                preview.setOnMouseClicked(event -> openPostDetail(quoted.getId()));
+                content.getChildren().add(preview);
+            }
         }
         if (post.getPoll() != null) content.getChildren().add(PollView.create(post, this::refreshProfileData));
 
@@ -524,6 +532,11 @@ public class ProfileController {
         actions.getChildren().addAll(reply, repost, like, actionSpacer, bookmark);
         content.getChildren().add(actions);
         row.getChildren().addAll(avatar, content);
+        row.setOnMouseClicked(event -> {
+            if (!isInteractivePostTarget((Node) event.getTarget(), row)) {
+                openPostDetail(post.getId());
+            }
+        });
         return row;
     }
 
@@ -594,6 +607,7 @@ public class ProfileController {
             addText(flow, textContent.substring(cursor, matcher.start()), false);
             String value = matcher.group();
             Text token = addText(flow, value, true);
+            markPostLink(token);
             token.setOnMouseClicked(event -> {
                 if (value.startsWith("@")) {
                     openProfile(value.substring(1));
@@ -694,6 +708,23 @@ public class ProfileController {
     private void openPostDetail(long postId) {
         postStore.requestPost(postId);
         NavigationManager.switchScene("/views/Feed.fxml");
+    }
+
+    private boolean isInteractivePostTarget(Node target, Node boundary) {
+        Node cursor = target;
+        while (cursor != null && cursor != boundary) {
+            if (cursor instanceof Button || cursor.getStyleClass().contains("post-link-target")) {
+                return true;
+            }
+            cursor = cursor.getParent();
+        }
+        return false;
+    }
+
+    private void markPostLink(Node node) {
+        if (node != null && !node.getStyleClass().contains("post-link-target")) {
+            node.getStyleClass().add("post-link-target");
+        }
     }
 
     @FXML

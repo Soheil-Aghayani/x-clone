@@ -13,7 +13,7 @@ import java.time.Duration;
 
 public class serverConnection {
     private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(4))
+            .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
@@ -35,7 +35,7 @@ public class serverConnection {
 
     public synchronized Response sendMessage(Request requestMessage) throws IOException {
         HttpRequest request = HttpRequest.newBuilder(ServerEndpoint.apiUri())
-                .timeout(Duration.ofSeconds(10))
+                .timeout(Duration.ofSeconds(75))
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json; charset=UTF-8")
                 .POST(HttpRequest.BodyPublishers.ofString(MessageCodec.encodeRequest(requestMessage)))

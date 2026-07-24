@@ -22,7 +22,7 @@ import java.util.UUID;
 /**
  * SQLite-compatible account persistence.
  *
- * <p>Koyeb uses the hosted Turso database when TURSO_DATABASE_URL and
+ * <p>Render uses the hosted Turso database when TURSO_DATABASE_URL and
  * TURSO_AUTH_TOKEN are configured. Local development uses an SQLite file and
  * automatically imports the old accounts.json database once.</p>
  */

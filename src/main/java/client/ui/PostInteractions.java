@@ -39,8 +39,10 @@ public final class PostInteractions {
         PostComposerDialog.show(owner, original, PostComposerDialog.Mode.REPLY).ifPresent(composition -> {
             User user = UserSession.getInstance().getCurrentUser();
             if (user == null) return;
-            PostStore.getInstance().createReply(user, composition.text(), composition.mediaUri(), original);
-            refreshView.run();
+            Post created = PostStore.getInstance().createReply(
+                    user, composition.text(), composition.mediaUri(), original);
+            if (created != null) refreshView.run();
+            else XDialog.info(owner, "Reply not sent", "The shared server could not publish your reply.");
         });
     }
 
@@ -49,8 +51,10 @@ public final class PostInteractions {
         PostComposerDialog.showPost(owner).ifPresent(composition -> {
             User user = UserSession.getInstance().getCurrentUser();
             if (user == null) return;
-            PostStore.getInstance().createPost(user, composition.text(), composition.mediaUri());
-            refreshView.run();
+            Post created = PostStore.getInstance().createPost(
+                    user, composition.text(), composition.mediaUri());
+            if (created != null) refreshView.run();
+            else XDialog.info(owner, "Post not sent", "The shared server could not publish your post.");
         });
     }
 
@@ -74,8 +78,10 @@ public final class PostInteractions {
             PostComposerDialog.show(owner, original, PostComposerDialog.Mode.QUOTE).ifPresent(composition -> {
                 User user = UserSession.getInstance().getCurrentUser();
                 if (user == null) return;
-                PostStore.getInstance().createQuote(user, composition.text(), composition.mediaUri(), original);
-                refreshView.run();
+                Post created = PostStore.getInstance().createQuote(
+                        user, composition.text(), composition.mediaUri(), original);
+                if (created != null) refreshView.run();
+                else XDialog.info(owner, "Quote not sent", "The shared server could not publish your quote.");
             });
         });
         menu.show(anchor, Side.BOTTOM, -12, 2);

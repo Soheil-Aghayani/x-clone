@@ -45,18 +45,19 @@ Write-Host "      Build OK." -ForegroundColor Green
 $Gson   = Join-Path $M2 "com\google\code\gson\gson\2.10.1\gson-2.10.1.jar"
 $Bcrypt = Join-Path $M2 "at\favre\lib\bcrypt\0.10.2\bcrypt-0.10.2.jar"
 $Bytes  = Join-Path $M2 "at\favre\lib\bytes\1.5.0\bytes-1.5.0.jar"
+$Sqlite = Join-Path $M2 "org\xerial\sqlite-jdbc\3.53.2.1\sqlite-jdbc-3.53.2.1.jar"
 $FxControls = Join-Path $M2 "org\openjfx\javafx-controls\$FxVer\javafx-controls-$FxVer-win.jar"
 $FxGraphics = Join-Path $M2 "org\openjfx\javafx-graphics\$FxVer\javafx-graphics-$FxVer-win.jar"
 $FxBase     = Join-Path $M2 "org\openjfx\javafx-base\$FxVer\javafx-base-$FxVer-win.jar"
 $FxFxml     = Join-Path $M2 "org\openjfx\javafx-fxml\$FxVer\javafx-fxml-$FxVer-win.jar"
 
-foreach ($j in @($Gson, $Bcrypt, $Bytes, $FxControls, $FxGraphics, $FxBase, $FxFxml)) {
+foreach ($j in @($Gson, $Bcrypt, $Bytes, $Sqlite, $FxControls, $FxGraphics, $FxBase, $FxFxml)) {
     if (-not (Test-Path -LiteralPath $j)) {
         Fail "Missing jar:`n  $j`n`nRun once in this folder:`n  mvn dependency:resolve"
     }
 }
 
-$ServerCp   = "$Classes;$Gson;$Bcrypt;$Bytes"
+$ServerCp   = "$Classes;$Gson;$Bcrypt;$Bytes;$Sqlite"
 $ClientCp   = $ServerCp
 $ModulePath = "$FxControls;$FxGraphics;$FxBase;$FxFxml"
 

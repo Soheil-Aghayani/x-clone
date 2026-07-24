@@ -1,14 +1,21 @@
 package client.timeline;
 
 import client.UserSession;
+import client.network.SharedSocialClient;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyLongProperty;
 import javafx.beans.property.ReadOnlyLongWrapper;
 import javafx.util.Duration;
 import shared.models.User;
+import shared.models.SharedFollow;
+import shared.models.SharedNotification;
+import shared.models.SharedPost;
+import shared.models.SharedProfile;
+import shared.models.SharedSocialState;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,6 +42,9 @@ public final class PostStore {
     private static final PostStore INSTANCE = new PostStore();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MMM d").withZone(ZoneId.systemDefault());
     private static final Pattern MENTION_PATTERN = Pattern.compile("(?<![\\p{L}\\p{N}_])@([\\p{L}\\p{N}_]+)", Pattern.UNICODE_CHARACTER_CLASS);
+    static final Comparator<Post> NEWEST_FIRST = Comparator
+            .comparing(Post::getCreatedAt, Comparator.reverseOrder())
+            .thenComparing(Post::getId, Comparator.reverseOrder());
 
     private final List<Post> posts = new ArrayList<>();
     private final List<NotificationItem> notifications = new ArrayList<>();
@@ -43,11 +53,14 @@ public final class PostStore {
     private final Map<String, Set<String>> mutedAccounts = new HashMap<>();
     private final Map<String, DraftData> drafts = new HashMap<>();
     private final Map<String, ProfileData> profiles = new HashMap<>();
+    private final Set<String> sharedProfileKeys = new HashSet<>();
+    private final Map<String, Set<String>> sharedFollowing = new HashMap<>();
     private final Set<String> recordedViews = new HashSet<>();
     private final AtomicLong nextId = new AtomicLong(1);
     private final AtomicLong nextNotificationId = new AtomicLong(1);
     private final ReadOnlyLongWrapper clock = new ReadOnlyLongWrapper(Instant.now().getEpochSecond());
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private final SharedSocialClient sharedClient = new SharedSocialClient();
     private final Path stateFile;
     private String requestedHashtag;
     private boolean composerFocusRequested;
@@ -72,6 +85,30 @@ public final class PostStore {
     }
 
     public static PostStore getInstance() { return INSTANCE; }
+
+    /**
+     * Fetches the authenticated user's shared social state. Network work can be
+     * slow on a sleeping free host, so callers should invoke this off the FX thread.
+     */
+    public boolean syncSharedState() {
+        if (UserSession.getInstance().getToken() == null) return false;
+        try {
+            applySharedState(sharedClient.sync());
+            return true;
+        } catch (IOException exception) {
+            System.err.println("Could not sync shared social state: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    public synchronized void clearSharedState() {
+        posts.removeIf(PostStore::isShared);
+        notifications.removeIf(item -> item.id() < 0);
+        sharedProfileKeys.forEach(profiles::remove);
+        sharedProfileKeys.clear();
+        removeSharedFollowing();
+        signalClock();
+    }
 
     private void seed() {
         Instant now = Instant.now();
@@ -150,14 +187,16 @@ public final class PostStore {
                                 int likes, int replies, int reposts, int views) {
         Post existing = posts.stream().filter(post -> post.getContent().equals(content)).findFirst().orElse(null);
         if (existing != null) {
+            existing.setDemo(true);
+            existing.setCreatedAt(createdAt);
             if (existing.getLikes() == 0 && existing.getReplies() == 0 && existing.getRetweets() == 0 && existing.getViews() == 0) {
                 existing.restoreState(likes, replies, reposts, views, existing.isPinned(), existing.getLikedBy(),
                         existing.getRepliedBy(), existing.getRetweetedBy(), existing.getBookmarkedBy());
-                return true;
             }
-            return false;
+            return true;
         }
         Post post = new Post(nextId.getAndIncrement(), authorName, username, content, createdAt);
+        post.setDemo(true);
         post.restoreState(likes, replies, reposts, views, false, Set.of(), Set.of(), Set.of(), Set.of());
         posts.add(post);
         return true;
@@ -166,6 +205,16 @@ public final class PostStore {
     public synchronized Post createPost(User author, String content) { return createPost(author, content, null); }
 
     public synchronized Post createPost(User author, String content, String mediaUri) {
+        if (hasSharedSession()) {
+            Set<Long> previous = sharedPostIds();
+            try {
+                applySharedState(sharedClient.createPost(content, mediaUri, null, null));
+                return preserveLocalMedia(newestSharedPostNotIn(previous), mediaUri);
+            } catch (IOException exception) {
+                System.err.println("Could not publish shared post: " + exception.getMessage());
+                return null;
+            }
+        }
         return createPost(author, content, mediaUri, null, null);
     }
 
@@ -201,6 +250,17 @@ public final class PostStore {
     }
 
     public synchronized Post createReply(User author, String content, String mediaUri, Post original) {
+        if (isShared(original) && hasSharedSession()) {
+            Set<Long> previous = sharedPostIds();
+            try {
+                applySharedState(sharedClient.createPost(
+                        content, mediaUri, sharedServerId(original.getId()), null));
+                return preserveLocalMedia(newestSharedPostNotIn(previous), mediaUri);
+            } catch (IOException exception) {
+                System.err.println("Could not publish shared reply: " + exception.getMessage());
+                return null;
+            }
+        }
         original.addReply();
         Post reply = createPost(author, content, mediaUri, original.getId(), null);
         notify(original.getAuthorUsername(), author, NotificationItem.Type.REPLY, original.getId(), content);
@@ -209,6 +269,17 @@ public final class PostStore {
     }
 
     public synchronized Post createQuote(User author, String content, String mediaUri, Post original) {
+        if (isShared(original) && hasSharedSession()) {
+            Set<Long> previous = sharedPostIds();
+            try {
+                applySharedState(sharedClient.createPost(
+                        content, mediaUri, null, sharedServerId(original.getId())));
+                return preserveLocalMedia(newestSharedPostNotIn(previous), mediaUri);
+            } catch (IOException exception) {
+                System.err.println("Could not publish shared quote: " + exception.getMessage());
+                return null;
+            }
+        }
         original.addQuote();
         Post quote = createPost(author, content, mediaUri, null, original.getId());
         notify(original.getAuthorUsername(), author, NotificationItem.Type.REPOST, original.getId(), content);
@@ -217,6 +288,14 @@ public final class PostStore {
     }
 
     public synchronized void toggleLike(Post post) {
+        if (isShared(post) && hasSharedSession()) {
+            try {
+                applySharedState(sharedClient.toggleLike(sharedServerId(post.getId())));
+            } catch (IOException exception) {
+                System.err.println("Could not update shared like: " + exception.getMessage());
+            }
+            return;
+        }
         boolean increasing = !post.isLiked();
         post.toggleLike();
         if (increasing) notify(post.getAuthorUsername(), activeUser(), NotificationItem.Type.LIKE, post.getId(), post.getContent());
@@ -224,16 +303,44 @@ public final class PostStore {
     }
 
     public synchronized void toggleRepost(Post post) {
+        if (isShared(post) && hasSharedSession()) {
+            try {
+                applySharedState(sharedClient.toggleRepost(sharedServerId(post.getId())));
+            } catch (IOException exception) {
+                System.err.println("Could not update shared repost: " + exception.getMessage());
+            }
+            return;
+        }
         boolean increasing = !post.isRetweeted();
         post.toggleRetweet();
         if (increasing) notify(post.getAuthorUsername(), activeUser(), NotificationItem.Type.REPOST, post.getId(), post.getContent());
         save();
     }
 
-    public synchronized void toggleBookmark(Post post) { post.toggleBookmark(); save(); }
+    public synchronized void toggleBookmark(Post post) {
+        if (isShared(post) && hasSharedSession()) {
+            try {
+                applySharedState(sharedClient.toggleBookmark(sharedServerId(post.getId())));
+            } catch (IOException exception) {
+                System.err.println("Could not update shared bookmark: " + exception.getMessage());
+            }
+            return;
+        }
+        post.toggleBookmark();
+        save();
+    }
 
     public synchronized boolean toggleFollow(User actor, String targetUsername) {
         if (actor == null || targetUsername == null || actor.getUsername().equalsIgnoreCase(targetUsername)) return false;
+        if (hasSharedSession() && sharedProfileKeys.contains(normalize(targetUsername))) {
+            try {
+                applySharedState(sharedClient.toggleFollow(targetUsername));
+                return isFollowing(actor.getUsername(), targetUsername);
+            } catch (IOException exception) {
+                System.err.println("Could not update shared follow: " + exception.getMessage());
+                return isFollowing(actor.getUsername(), targetUsername);
+            }
+        }
         String actorKey = normalize(actor.getUsername());
         String targetKey = normalize(targetUsername);
         Set<String> targets = following.computeIfAbsent(actorKey, ignored -> new LinkedHashSet<>());
@@ -267,9 +374,10 @@ public final class PostStore {
     public synchronized List<Post> getAllPosts() { return visiblePosts(posts); }
 
     public synchronized List<Post> getForYouPosts() {
-        return visiblePosts(posts).stream().sorted(Comparator
-                .comparingInt((Post post) -> post.getLikes() + post.getRetweets() * 2 + post.getReplies() * 2).reversed()
-                .thenComparing(Post::getCreatedAt, Comparator.reverseOrder())).toList();
+        return visiblePosts(posts).stream()
+                .filter(post -> post.getReplyToId() == null)
+                .sorted(NEWEST_FIRST)
+                .toList();
     }
 
     public synchronized List<Post> getFollowingPosts(String username) {
@@ -278,6 +386,7 @@ public final class PostStore {
         return visiblePosts(posts).stream()
                 .filter(post -> targets.contains(normalize(post.getAuthorUsername())))
                 .filter(post -> post.getReplyToId() == null)
+                .sorted(NEWEST_FIRST)
                 .toList();
     }
 
@@ -293,7 +402,56 @@ public final class PostStore {
     }
 
     public synchronized List<Post> getReplies(long postId) {
-        return visiblePosts(posts).stream().filter(post -> post.getReplyToId() != null && post.getReplyToId() == postId).toList();
+        return visiblePosts(posts).stream()
+                .filter(post -> post.getReplyToId() != null && post.getReplyToId() == postId)
+                .sorted(Comparator.comparing(Post::getCreatedAt).thenComparing(Post::getId))
+                .toList();
+    }
+
+    /**
+     * Returns the visible parent chain from the conversation root to the direct
+     * parent of the selected post.
+     */
+    public synchronized List<Post> getConversationAncestors(long postId) {
+        Map<Long, Post> visible = new HashMap<>();
+        visiblePosts(posts).forEach(post -> visible.put(post.getId(), post));
+        List<Post> ancestors = new ArrayList<>();
+        Set<Long> visited = new HashSet<>();
+        Post cursor = visible.get(postId);
+        while (cursor != null && cursor.getReplyToId() != null
+                && visited.add(cursor.getId())) {
+            cursor = visible.get(cursor.getReplyToId());
+            if (cursor != null) ancestors.addFirst(cursor);
+        }
+        return List.copyOf(ancestors);
+    }
+
+    /**
+     * Returns every visible reply below a post, including nested replies, in
+     * conversation order so a thread never hides later comments.
+     */
+    public synchronized List<Post> getThreadReplies(long postId) {
+        List<Post> candidates = visiblePosts(posts).stream()
+                .filter(post -> post.getReplyToId() != null)
+                .sorted(Comparator.comparing(Post::getCreatedAt).thenComparing(Post::getId))
+                .toList();
+        Set<Long> conversationIds = new HashSet<>();
+        conversationIds.add(postId);
+        List<Post> thread = new ArrayList<>();
+        boolean changed;
+        do {
+            changed = false;
+            for (Post candidate : candidates) {
+                if (!conversationIds.contains(candidate.getId())
+                        && conversationIds.contains(candidate.getReplyToId())) {
+                    conversationIds.add(candidate.getId());
+                    thread.add(candidate);
+                    changed = true;
+                }
+            }
+        } while (changed);
+        thread.sort(Comparator.comparing(Post::getCreatedAt).thenComparing(Post::getId));
+        return List.copyOf(thread);
     }
 
     public synchronized List<Post> getBookmarkedPosts() { return visiblePosts(posts).stream().filter(Post::isBookmarked).toList(); }
@@ -316,8 +474,29 @@ public final class PostStore {
 
     public synchronized boolean deletePost(Post post) {
         if (post == null || !post.getAuthorUsername().equalsIgnoreCase(activeUsername())) return false;
-        boolean removed = posts.removeIf(candidate -> candidate.getId() == post.getId() ||
-                (candidate.getReplyToId() != null && candidate.getReplyToId() == post.getId()));
+        if (isShared(post) && hasSharedSession()) {
+            try {
+                applySharedState(sharedClient.deletePost(sharedServerId(post.getId())));
+                return getPost(post.getId()) == null;
+            } catch (IOException exception) {
+                System.err.println("Could not delete shared post: " + exception.getMessage());
+                return false;
+            }
+        }
+        Set<Long> removedIds = new HashSet<>();
+        removedIds.add(post.getId());
+        boolean changed;
+        do {
+            changed = false;
+            for (Post candidate : posts) {
+                if (candidate.getReplyToId() != null
+                        && removedIds.contains(candidate.getReplyToId())
+                        && removedIds.add(candidate.getId())) {
+                    changed = true;
+                }
+            }
+        } while (changed);
+        boolean removed = posts.removeIf(candidate -> removedIds.contains(candidate.getId()));
         if (removed) save();
         return removed;
     }
@@ -362,6 +541,13 @@ public final class PostStore {
     }
 
     public synchronized void markNotificationsRead(String recipient) {
+        if (hasSharedSession()) {
+            try {
+                applySharedState(sharedClient.markNotificationsRead());
+            } catch (IOException exception) {
+                System.err.println("Could not mark shared notifications read: " + exception.getMessage());
+            }
+        }
         String key = normalize(recipient);
         for (int index = 0; index < notifications.size(); index++) {
             NotificationItem item = notifications.get(index);
@@ -387,6 +573,13 @@ public final class PostStore {
                 user.getBirthDate(), user.isProfessional()));
         updateAuthorName(user.getUsername(), user.getDisplayName());
         save();
+        if (hasSharedSession()) {
+            try {
+                applySharedState(sharedClient.updateProfile(user));
+            } catch (IOException exception) {
+                System.err.println("Could not update shared profile: " + exception.getMessage());
+            }
+        }
     }
 
     /**
@@ -507,6 +700,209 @@ public final class PostStore {
     private static String normalize(String value) { return value == null ? "" : value.toLowerCase(Locale.ROOT); }
     private void touch() { clock.set(Instant.now().getEpochSecond()); save(); }
 
+    private synchronized void applySharedState(SharedSocialState state) {
+        if (state == null) return;
+
+        posts.removeIf(Post::isDemo);
+        Map<Long, Post> existingSharedPosts = new HashMap<>();
+        posts.stream().filter(PostStore::isShared)
+                .forEach(post -> existingSharedPosts.put(post.getId(), post));
+        posts.removeIf(PostStore::isShared);
+        if (state.posts() != null) {
+            for (SharedPost shared : state.posts()) {
+                long clientId = sharedClientId(shared.id());
+                Post post = existingSharedPosts.get(clientId);
+                if (post == null) post = sharedPost(shared);
+                else restoreSharedPostState(post, shared);
+                posts.add(post);
+            }
+        }
+        posts.sort(NEWEST_FIRST);
+
+        notifications.removeIf(item -> item.id() < 0);
+        if (state.notifications() != null) {
+            for (SharedNotification shared : state.notifications()) {
+                NotificationItem.Type type;
+                try {
+                    type = NotificationItem.Type.valueOf(shared.type());
+                } catch (RuntimeException ignored) {
+                    type = NotificationItem.Type.SYSTEM;
+                }
+                notifications.add(new NotificationItem(
+                        sharedClientId(shared.id()),
+                        shared.recipientUsername(),
+                        shared.actorName(),
+                        shared.actorUsername(),
+                        type,
+                        shared.postId() == null ? null : sharedClientId(shared.postId()),
+                        shared.excerpt(),
+                        instant(shared.createdAt()),
+                        shared.read()));
+            }
+        }
+
+        Map<String, ProfileData> previousProfiles = new HashMap<>(profiles);
+        sharedProfileKeys.forEach(profiles::remove);
+        sharedProfileKeys.clear();
+        if (state.profiles() != null) {
+            for (SharedProfile profile : state.profiles()) {
+                String key = normalize(profile.username());
+                ProfileData previous = previousProfiles.get(key);
+                sharedProfileKeys.add(key);
+                profiles.put(key, new ProfileData(
+                        profile.displayName(),
+                        profile.bio(),
+                        preferRemoteUri(profile.avatarUrl(), previous == null ? null : previous.avatarUrl),
+                        preferRemoteUri(profile.bannerUrl(), previous == null ? null : previous.bannerUrl),
+                        profile.location(),
+                        profile.website(),
+                        profile.birthDate(),
+                        profile.professional()));
+            }
+        }
+
+        removeSharedFollowing();
+        if (state.follows() != null) {
+            for (SharedFollow follow : state.follows()) {
+                String actor = normalize(follow.followerUsername());
+                String target = normalize(follow.followedUsername());
+                following.computeIfAbsent(actor, ignored -> new LinkedHashSet<>()).add(target);
+                sharedFollowing.computeIfAbsent(actor, ignored -> new LinkedHashSet<>()).add(target);
+            }
+        }
+        signalClock();
+    }
+
+    /**
+     * Shared-state fetches run on a worker thread. Marshal property updates back
+     * to JavaFX so UI listeners never execute on the networking thread.
+     */
+    private void signalClock() {
+        long now = Instant.now().getEpochSecond();
+        if (Platform.isFxApplicationThread()) {
+            clock.set(now);
+            return;
+        }
+        try {
+            Platform.runLater(() -> clock.set(now));
+        } catch (IllegalStateException toolkitNotStarted) {
+            // Unit tests can use the store without starting the JavaFX toolkit.
+            clock.set(now);
+        }
+    }
+
+    private Post sharedPost(SharedPost shared) {
+        Post post = new Post(
+                sharedClientId(shared.id()),
+                shared.authorName(),
+                shared.authorUsername(),
+                shared.content(),
+                instant(shared.createdAt()),
+                shared.mediaUri(),
+                shared.replyToId() == null ? null : sharedClientId(shared.replyToId()),
+                shared.quotedPostId() == null ? null : sharedClientId(shared.quotedPostId()));
+        restoreSharedPostState(post, shared);
+        return post;
+    }
+
+    private void restoreSharedPostState(Post post, SharedPost shared) {
+        String username = activeUsername();
+        post.restoreState(
+                shared.likes(),
+                shared.replies(),
+                shared.reposts(),
+                shared.views(),
+                false,
+                shared.likedByViewer() ? Set.of(username) : Set.of(),
+                Set.of(),
+                shared.repostedByViewer() ? Set.of(username) : Set.of(),
+                shared.bookmarkedByViewer() ? Set.of(username) : Set.of());
+    }
+
+    private void removeSharedFollowing() {
+        sharedFollowing.forEach((actor, targets) -> {
+            Set<String> stored = following.get(actor);
+            if (stored != null) {
+                stored.removeAll(targets);
+                if (stored.isEmpty()) following.remove(actor);
+            }
+        });
+        sharedFollowing.clear();
+    }
+
+    private Set<Long> sharedPostIds() {
+        Set<Long> ids = new HashSet<>();
+        posts.stream().filter(PostStore::isShared).map(Post::getId).forEach(ids::add);
+        return ids;
+    }
+
+    private Post newestSharedPostNotIn(Set<Long> previousIds) {
+        return posts.stream()
+                .filter(PostStore::isShared)
+                .filter(post -> !previousIds.contains(post.getId()))
+                .max(NEWEST_FIRST.reversed())
+                .orElse(null);
+    }
+
+    /**
+     * A local file cannot be served to another computer without object storage,
+     * but the author should still see the selected file on this device. Keeping
+     * the replacement Post in memory also survives subsequent state refreshes.
+     */
+    private Post preserveLocalMedia(Post post, String mediaUri) {
+        if (post == null || mediaUri == null || mediaUri.isBlank()
+                || (post.getMediaUri() != null && !post.getMediaUri().isBlank())) {
+            return post;
+        }
+        Post replacement = new Post(
+                post.getId(),
+                post.getAuthorName(),
+                post.getAuthorUsername(),
+                post.getContent(),
+                post.getCreatedAt(),
+                mediaUri,
+                post.getReplyToId(),
+                post.getQuotedPostId());
+        replacement.restoreState(
+                post.getLikes(), post.getReplies(), post.getRetweets(), post.getViews(),
+                post.isPinned(), post.getLikedBy(), post.getRepliedBy(),
+                post.getRetweetedBy(), post.getBookmarkedBy());
+        int index = posts.indexOf(post);
+        if (index >= 0) posts.set(index, replacement);
+        return replacement;
+    }
+
+    private static String preferRemoteUri(String remote, String localFallback) {
+        return remote == null || remote.isBlank() ? localFallback : remote;
+    }
+
+    private boolean hasSharedSession() {
+        String token = UserSession.getInstance().getToken();
+        return token != null && !token.isBlank();
+    }
+
+    private static boolean isShared(Post post) {
+        return post != null && post.getId() < 0;
+    }
+
+    private static long sharedClientId(long serverId) {
+        if (serverId < 1) throw new IllegalArgumentException("Shared ids must be positive.");
+        return -serverId;
+    }
+
+    private static long sharedServerId(long clientId) {
+        if (clientId >= 0) throw new IllegalArgumentException("This is not a shared post.");
+        return -clientId;
+    }
+
+    private static Instant instant(String value) {
+        try {
+            return Instant.parse(value);
+        } catch (RuntimeException exception) {
+            return Instant.now();
+        }
+    }
+
     private boolean load() {
         if (!Files.isRegularFile(stateFile)) return false;
         try {
@@ -519,6 +915,7 @@ public final class PostStore {
                         Instant.parse(stored.createdAt), stored.mediaUri, stored.replyToId, stored.quotedPostId);
                 post.restoreState(stored.likes, stored.replies, stored.retweets, stored.views, stored.pinned,
                         set(stored.likedBy), set(stored.repliedBy), set(stored.retweetedBy), set(stored.bookmarkedBy));
+                post.setDemo(stored.demo);
                 if (stored.poll != null) post.setPoll(new PollData(stored.poll.choices, stored.poll.votes,
                         stored.poll.votesByUser, Instant.parse(stored.poll.endsAt)));
                 posts.add(post);
@@ -545,13 +942,15 @@ public final class PostStore {
             StoredState state = new StoredState();
             state.nextId = nextId.get();
             state.nextNotificationId = nextNotificationId.get();
-            posts.forEach(post -> state.posts.add(new StoredPost(post)));
+            posts.stream().filter(post -> !isShared(post) && !post.isDemo())
+                    .forEach(post -> state.posts.add(new StoredPost(post)));
             following.forEach((key, values) -> state.following.put(key, new ArrayList<>(values)));
             hiddenPosts.forEach((key, values) -> state.hiddenPosts.put(key, new ArrayList<>(values)));
             mutedAccounts.forEach((key, values) -> state.mutedAccounts.put(key, new ArrayList<>(values)));
             state.drafts.putAll(drafts);
             state.profiles.putAll(profiles);
-            notifications.forEach(item -> state.notifications.add(new StoredNotification(item)));
+            notifications.stream().filter(item -> item.id() >= 0)
+                    .forEach(item -> state.notifications.add(new StoredNotification(item)));
             Path temporary = stateFile.resolveSibling(stateFile.getFileName() + ".tmp");
             Files.writeString(temporary, gson.toJson(state));
             try { Files.move(temporary, stateFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
@@ -589,7 +988,7 @@ public final class PostStore {
 
     private static final class StoredPost {
         long id; String authorName; String authorUsername; String content; String createdAt; String mediaUri;
-        Long replyToId; Long quotedPostId; int likes; int replies; int retweets; int views; boolean pinned;
+        Long replyToId; Long quotedPostId; int likes; int replies; int retweets; int views; boolean pinned; boolean demo;
         List<String> likedBy; List<String> repliedBy; List<String> retweetedBy; List<String> bookmarkedBy;
         StoredPoll poll;
         StoredPost(Post post) {
@@ -597,6 +996,7 @@ public final class PostStore {
             content = post.getContent(); createdAt = post.getCreatedAt().toString(); mediaUri = post.getMediaUri();
             replyToId = post.getReplyToId(); quotedPostId = post.getQuotedPostId(); likes = post.getLikes();
             replies = post.getReplies(); retweets = post.getRetweets(); views = post.getViews(); pinned = post.isPinned();
+            demo = post.isDemo();
             likedBy = new ArrayList<>(post.getLikedBy()); repliedBy = new ArrayList<>(post.getRepliedBy());
             retweetedBy = new ArrayList<>(post.getRetweetedBy()); bookmarkedBy = new ArrayList<>(post.getBookmarkedBy());
             if (post.getPoll() != null) poll = new StoredPoll(post.getPoll());

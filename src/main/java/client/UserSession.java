@@ -42,7 +42,6 @@ public class UserSession {
         if (user != null) followedUsernames.addAll(PostStore.getInstance().getFollowing(user.getUsername()));
         if (user != null && session != null) {
             System.out.println("Session Activated: Welcome @" + user.getUsername() + " (" + user.getDisplayName() + ")");
-            System.out.println("Token Secured in UI Context: [" + session.getToken() + "]");
         }
     }
 
@@ -53,6 +52,7 @@ public class UserSession {
         if (this.currentUser != null) {
             System.out.println("Session Terminated: @" + this.currentUser.getUsername() + " logged out safely.");
         }
+        PostStore.getInstance().clearSharedState();
         this.currentUser = null;
         this.currentSession = null;
         this.followedUsernames.clear();
@@ -86,7 +86,8 @@ public class UserSession {
     }
 
     public boolean isFollowing(String username) {
-        return followedUsernames.contains(username.toLowerCase());
+        return currentUser != null
+                && PostStore.getInstance().isFollowing(currentUser.getUsername(), username);
     }
 
     public int getFollowingCount() {

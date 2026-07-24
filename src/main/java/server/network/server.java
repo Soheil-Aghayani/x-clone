@@ -35,6 +35,7 @@ public class server {
     }
 
     public static HttpServer start(int port) throws IOException {
+        AppDatabase.getInstance().verifyReady();
         HttpServer httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         httpServer.createContext("/health", server::health);
         httpServer.createContext("/api/request", server::request);

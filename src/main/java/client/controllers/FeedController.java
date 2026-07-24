@@ -24,6 +24,7 @@ import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.util.Duration;
 import javafx.fxml.FXML;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Side;
@@ -95,6 +96,8 @@ public class FeedController {
     private Long selectedConversationId;
     private String moreSection = "More";
     private int lastUnreadNotificationCount = -1;
+    private boolean sharedSyncInProgress;
+    private Timeline sharedRefreshTimeline;
 
     @FXML
     private TextArea tweetTextArea;
@@ -194,10 +197,60 @@ public class FeedController {
         });
         refreshFollowButtons();
         refreshTimeline();
+        refreshSharedSocialState();
+        startSharedRefresh();
         postStore.clockProperty().addListener((observable, oldValue, newValue) -> updateNotificationChrome());
         if (postStore.consumeComposerFocusRequest()) {
             Platform.runLater(tweetTextArea::requestFocus);
         }
+    }
+
+    private void refreshSharedSocialState() {
+        refreshSharedSocialState(false);
+    }
+
+    private void refreshSharedSocialState(boolean preserveScroll) {
+        if (UserSession.getInstance().getToken() == null || sharedSyncInProgress) return;
+        sharedSyncInProgress = true;
+        double previousScroll = contentScroll == null ? 0 : contentScroll.getVvalue();
+        String previousView = viewMode;
+        Task<Boolean> task = new Task<>() {
+            @Override
+            protected Boolean call() {
+                return postStore.syncSharedState();
+            }
+        };
+        task.setOnSucceeded(event -> {
+            sharedSyncInProgress = false;
+            if (Boolean.TRUE.equals(task.getValue())) {
+                refreshFollowButtons();
+                refreshTimeline();
+                if (preserveScroll && previousView.equals(viewMode)) {
+                    Platform.runLater(() -> contentScroll.setVvalue(previousScroll));
+                }
+            }
+        });
+        task.setOnFailed(event -> sharedSyncInProgress = false);
+        task.setOnCancelled(event -> sharedSyncInProgress = false);
+        Thread thread = new Thread(task, "x-shared-social-sync");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private void startSharedRefresh() {
+        if (UserSession.getInstance().getToken() == null) return;
+        sharedRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(45), event -> {
+            if (contentScroll.getScene() == null) {
+                sharedRefreshTimeline.stop();
+                return;
+            }
+            Window window = contentScroll.getScene().getWindow();
+            if (window != null && window.isShowing()) {
+                refreshSharedSocialState(true);
+            }
+        }));
+        sharedRefreshTimeline.setCycleCount(Timeline.INDEFINITE);
+        sharedRefreshTimeline.play();
     }
 
     private void setupIcons() {
@@ -426,11 +479,18 @@ public class FeedController {
             return;
         }
 
-        postStore.createPost(currentUser, content, selectedMediaUri);
+        Post published = postStore.createPost(currentUser, content, selectedMediaUri);
+        if (published == null) {
+            XDialog.info(tweetTextArea.getScene() == null ? null : tweetTextArea.getScene().getWindow(),
+                    "Post not sent",
+                    "The shared server could not publish this post. Your text is still here so you can retry.");
+            return;
+        }
         tweetTextArea.clear();
         handleRemoveAttachment();
         activeHashtag = null;
         refreshTimeline();
+        Platform.runLater(() -> contentScroll.setVvalue(0));
     }
 
     @FXML
@@ -441,6 +501,7 @@ public class FeedController {
         if (searchField != null && !searchField.getText().isEmpty()) searchField.clear();
         if (centerSearchField != null && !centerSearchField.getText().isEmpty()) centerSearchField.clear();
         refreshTimeline();
+        refreshSharedSocialState();
     }
 
     @FXML
@@ -448,6 +509,7 @@ public class FeedController {
         viewMode = "explore";
         activeHashtag = null;
         refreshTimeline();
+        refreshSharedSocialState();
     }
 
     @FXML
@@ -455,6 +517,7 @@ public class FeedController {
         viewMode = "bookmarks";
         activeHashtag = null;
         refreshTimeline();
+        refreshSharedSocialState();
     }
 
     @FXML
@@ -462,6 +525,7 @@ public class FeedController {
         viewMode = "notifications";
         activeHashtag = null;
         refreshTimeline();
+        refreshSharedSocialState();
         updateNotificationChrome();
     }
 
@@ -1005,6 +1069,10 @@ public class FeedController {
         composerSection.setManaged(false);
         composerSection.setVisible(false);
         headerTitleLabel.setText("←  Post");
+        headerTitleLabel.setText("Post");
+        headerTitleLabel.setGraphic(AppIcons.icon("arrow-left-icon.svg", 20, "#0f1419"));
+        headerTitleLabel.setContentDisplay(ContentDisplay.LEFT);
+        headerTitleLabel.setGraphicTextGap(24);
         headerTitleLabel.setFont(AppFonts.fontFor("Post", 20, FontWeight.BOLD));
         headerTitleLabel.setStyle("-fx-cursor: hand;");
         headerTitleLabel.setOnMouseClicked(event -> handleShowHome());
@@ -1017,10 +1085,32 @@ public class FeedController {
             return;
         }
         postStore.recordView(post);
+        List<Post> ancestors = postStore.getConversationAncestors(post.getId());
+        for (Post ancestor : ancestors) {
+            HBox contextCard = createPostCard(ancestor);
+            contextCard.getStyleClass().add("thread-context-card");
+            timelineContainer.getChildren().add(contextCard);
+        }
         HBox detailCard = createPostCard(post);
         detailCard.getStyleClass().add("post-detail-card");
         timelineContainer.getChildren().add(detailCard);
-        List<Post> replies = postStore.getReplies(post.getId());
+
+        Button replyPrompt = new Button("Post your reply");
+        replyPrompt.getStyleClass().add("thread-reply-prompt");
+        replyPrompt.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(replyPrompt, Priority.ALWAYS);
+        Button replyAction = new Button("Reply");
+        replyAction.getStyleClass().add("composer-post-button");
+        Runnable openReplyComposer = () -> PostInteractions.showReply(
+                replyAction, post, this::refreshTimeline);
+        replyPrompt.setOnAction(event -> openReplyComposer.run());
+        replyAction.setOnAction(event -> openReplyComposer.run());
+        HBox replyComposer = new HBox(12, createProfileGlyph(38), replyPrompt, replyAction);
+        replyComposer.setAlignment(Pos.CENTER_LEFT);
+        replyComposer.getStyleClass().add("thread-reply-composer");
+        timelineContainer.getChildren().add(replyComposer);
+
+        List<Post> replies = postStore.getThreadReplies(post.getId());
         if (!replies.isEmpty()) {
             Label conversation = sectionHeading("Replies");
             conversation.getStyleClass().add("conversation-heading");
@@ -2448,6 +2538,9 @@ public class FeedController {
                 post.getAuthorUsername(),
                 openAuthor
         );
+        markPostLink(avatar);
+        markPostLink(displayName);
+        markPostLink(userHandle);
 
         Label timestamp = new Label();
         timestamp.setTextFill(Color.web("#536471"));
@@ -2521,12 +2614,12 @@ public class FeedController {
                 replyingTo.setFont(AppFonts.fontFor(replyingTo.getText(), 14));
                 replyingTo.setStyle("-fx-cursor: hand;");
                 replyingTo.setOnMouseClicked(event -> openProfile(original.getAuthorUsername()));
+                markPostLink(replyingTo);
                 contentStack.getChildren().add(replyingTo);
             }
         }
         if (!post.getContent().isBlank()) {
             bodyText.setStyle("-fx-cursor: hand;");
-            bodyText.setOnMouseClicked(event -> openPostDetail(post.getId()));
             contentStack.getChildren().add(bodyText);
         }
         if (post.getMediaUri() != null) {
@@ -2538,7 +2631,6 @@ public class FeedController {
                 media.setPreserveRatio(true);
                 media.setSmooth(true);
                 media.setStyle("-fx-background-radius: 16; -fx-border-radius: 16;");
-                media.setOnMouseClicked(event -> openPostDetail(post.getId()));
                 contentStack.getChildren().add(media);
             } else {
                 contentStack.getChildren().add(unavailableMediaLabel(post.getMediaUri()));
@@ -2546,11 +2638,21 @@ public class FeedController {
         }
         if (post.getQuotedPostId() != null) {
             Post quoted = postStore.getPost(post.getQuotedPostId());
-            if (quoted != null) contentStack.getChildren().add(PostComposerDialog.createPostPreview(quoted));
+            if (quoted != null) {
+                Node preview = PostComposerDialog.createPostPreview(quoted);
+                markPostLink(preview);
+                preview.setOnMouseClicked(event -> openPostDetail(quoted.getId()));
+                contentStack.getChildren().add(preview);
+            }
         }
         if (post.getPoll() != null) contentStack.getChildren().add(PollView.create(post, this::refreshTimeline));
         contentStack.getChildren().add(actionToolbar);
         postRow.getChildren().addAll(avatar, contentStack);
+        postRow.setOnMouseClicked(event -> {
+            if (!isInteractivePostTarget((Node) event.getTarget(), postRow)) {
+                openPostDetail(post.getId());
+            }
+        });
         return postRow;
     }
 
@@ -2573,6 +2675,7 @@ public class FeedController {
             addBodyText(flow, content.substring(cursor, matcher.start()), false);
             String token = matcher.group();
             Text tokenText = addBodyText(flow, token, true);
+            markPostLink(tokenText);
             tokenText.setOnMouseClicked(event -> {
                 if (token.startsWith("@")) {
                     openProfile(token.substring(1));
@@ -2711,6 +2814,23 @@ public class FeedController {
             cursor = cursor.getParent();
         }
         return false;
+    }
+
+    private boolean isInteractivePostTarget(Node target, Node boundary) {
+        Node cursor = target;
+        while (cursor != null && cursor != boundary) {
+            if (cursor instanceof Button || cursor.getStyleClass().contains("post-link-target")) {
+                return true;
+            }
+            cursor = cursor.getParent();
+        }
+        return false;
+    }
+
+    private void markPostLink(Node node) {
+        if (node != null && !node.getStyleClass().contains("post-link-target")) {
+            node.getStyleClass().add("post-link-target");
+        }
     }
 
     @FXML

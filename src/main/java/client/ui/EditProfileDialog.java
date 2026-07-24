@@ -8,11 +8,11 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -122,9 +122,29 @@ public final class EditProfileDialog {
         TextField website = new TextField(value(user.getWebsite()));
         TextField birthDate = new TextField(value(user.getBirthDate()));
         birthDate.setPromptText("Add your birth date");
-        CheckBox professional = new CheckBox("Switch to professional");
+        Label professionalTitle = new Label("Professional account");
+        professionalTitle.setFont(AppFonts.fontFor(professionalTitle.getText(), 16, FontWeight.BOLD));
+        Label professionalDescription = new Label(
+                "Show professional tools and account information on your profile.");
+        professionalDescription.setWrapText(true);
+        professionalDescription.setTextFill(Color.web("#536471"));
+        professionalDescription.setFont(AppFonts.fontFor(professionalDescription.getText(), 13));
+        VBox professionalCopy = new VBox(3, professionalTitle, professionalDescription);
+        HBox.setHgrow(professionalCopy, Priority.ALWAYS);
+
+        ToggleButton professional = new ToggleButton();
         professional.setSelected(user.isProfessional());
+        professional.setGraphic(new Circle(9, Color.WHITE));
+        professional.setContentDisplay(javafx.scene.control.ContentDisplay.GRAPHIC_ONLY);
+        professional.setAccessibleText("Professional account");
         professional.getStyleClass().add("professional-toggle");
+        updateProfessionalSwitch(professional);
+        professional.selectedProperty().addListener((observable, oldValue, selected) ->
+                updateProfessionalSwitch(professional));
+
+        HBox professionalSetting = new HBox(18, professionalCopy, professional);
+        professionalSetting.setAlignment(Pos.CENTER_LEFT);
+        professionalSetting.getStyleClass().add("professional-setting-row");
 
         fields.getChildren().addAll(
                 banner,
@@ -134,7 +154,7 @@ public final class EditProfileDialog {
                 field("Location", location),
                 field("Website", website),
                 field("Birth date", birthDate),
-                professional);
+                professionalSetting);
 
         ScrollPane scroll = new ScrollPane(fields);
         scroll.setFitToWidth(true);
@@ -212,6 +232,10 @@ public final class EditProfileDialog {
         button.setAccessibleText(accessibleText);
         button.getStyleClass().add("photo-overlay-button");
         return button;
+    }
+
+    private static void updateProfessionalSwitch(ToggleButton toggle) {
+        toggle.setAlignment(toggle.isSelected() ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
     }
 
     private static Optional<String> chooseImage(Window owner) {

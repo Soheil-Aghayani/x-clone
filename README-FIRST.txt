@@ -11,18 +11,20 @@ Backend selection:
 - If server-url.txt is included beside the EXE, the app uses that shared HTTPS backend.
 - Otherwise, the app starts its local development backend automatically.
 
-Local timeline, chat, profile, and media data is currently stored here:
+Client-only preferences, drafts, chat, and cached media are stored here:
   %USERPROFILE%\.x-clone
 
-Local-backend account data is stored here:
+Local-backend account and social data is stored here:
   %USERPROFILE%\.x-clone-server
   (SQLite database: xclone.db)
 
 Important:
 - Do not run the EXE from inside the ZIP. Extract the whole folder first.
-- Profile and media files selected from your computer remain local for now.
+- Core profiles, posts, interactions, follows, and notifications are shared when this
+  build is configured with a public backend.
+- Files selected from your computer remain local until cloud media uploads are added.
 - Never put a Turso token in server-url.txt or anywhere in this app.
-- A shared build's server-url.txt should contain only the public Koyeb HTTPS URL.
+- A shared build's server-url.txt should contain only the public Render HTTPS URL.
 
 If the app closes unexpectedly, diagnostic information is written to:
   %USERPROFILE%\.x-clone\client-error.log

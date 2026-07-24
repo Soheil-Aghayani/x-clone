@@ -16,7 +16,7 @@ public final class Post {
     private String authorName;
     private final String authorUsername;
     private String content;
-    private final Instant createdAt;
+    private Instant createdAt;
     private final String mediaUri;
     private final Long replyToId;
     private final Long quotedPostId;
@@ -25,6 +25,7 @@ public final class Post {
     private int retweets;
     private int views;
     private boolean pinned;
+    private boolean demo;
     private PollData poll;
     private final Set<String> likedBy = new HashSet<>();
     private final Set<String> repliedBy = new HashSet<>();
@@ -58,6 +59,9 @@ public final class Post {
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content == null ? "" : content; }
     public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) {
+        if (createdAt != null) this.createdAt = createdAt;
+    }
     public String getMediaUri() { return mediaUri; }
     public Long getReplyToId() { return replyToId; }
     public Long getQuotedPostId() { return quotedPostId; }
@@ -69,6 +73,8 @@ public final class Post {
     public PollData getPoll() { return poll; }
     public void setPoll(PollData poll) { this.poll = poll; }
     public void setPinned(boolean pinned) { this.pinned = pinned; }
+    public boolean isDemo() { return demo; }
+    public void setDemo(boolean demo) { this.demo = demo; }
     public boolean isLiked() { return likedBy.contains(activeUsername()); }
     public boolean isReplied() { return repliedBy.contains(activeUsername()); }
     public boolean isRetweeted() { return retweetedBy.contains(activeUsername()); }
