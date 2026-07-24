@@ -77,11 +77,6 @@ public final class PostStore {
         stateFile = dataDirectory.resolve("social-state.json");
         load();
         seed();
-
-        Timeline clockTimeline = new Timeline(new KeyFrame(Duration.seconds(1), event ->
-                clock.set(Instant.now().getEpochSecond())));
-        clockTimeline.setCycleCount(Timeline.INDEFINITE);
-        clockTimeline.play();
     }
 
     public static PostStore getInstance() { return INSTANCE; }
@@ -648,7 +643,36 @@ public final class PostStore {
         save();
     }
 
-    public ReadOnlyLongProperty clockProperty() { return clock.getReadOnlyProperty(); }
+    private Timeline clockTimeline;
+
+    public ReadOnlyLongProperty clockProperty() {
+        ensureClockTimeline();
+        return clock.getReadOnlyProperty();
+    }
+
+    /**
+     * The store is also used by non-UI tests and may be initialized before the
+     * JavaFX toolkit. Starting a Timeline from the constructor makes that class
+     * initialization order-dependent, particularly on Linux/Xvfb. Start the
+     * display clock only when a UI asks for it and the FX thread is ready.
+     */
+    private void ensureClockTimeline() {
+        if (clockTimeline != null) return;
+        if (!Platform.isFxApplicationThread()) {
+            try {
+                Platform.runLater(this::ensureClockTimeline);
+            } catch (IllegalStateException toolkitNotStarted) {
+                // A later UI call to clockProperty() will try again.
+            }
+            return;
+        }
+
+        Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(1), event ->
+                clock.set(Instant.now().getEpochSecond())));
+        timeline.setCycleCount(Timeline.INDEFINITE);
+        clockTimeline = timeline;
+        timeline.play();
+    }
     public void requestHashtag(String hashtag) { requestedHashtag = hashtag; }
     public String consumeRequestedHashtag() { String value = requestedHashtag; requestedHashtag = null; return value; }
     public void requestComposerFocus() { composerFocusRequested = true; }
