@@ -14,6 +14,7 @@ public class User {
     private String website;
     private String birthDate;
     private boolean professional;
+    private String role = "user";
 
     public User(){}
 
@@ -41,6 +42,8 @@ public class User {
     public String getWebsite() { return website; }
     public String getBirthDate() { return birthDate; }
     public boolean isProfessional() { return professional; }
+    public String getRole() { return role == null || role.isBlank() ? "user" : role; }
+    public boolean isAdmin() { return "admin".equalsIgnoreCase(getRole()); }
 
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public void setBio(String bio) { this.bio = bio; }
@@ -50,5 +53,6 @@ public class User {
     public void setWebsite(String website) { this.website = website; }
     public void setBirthDate(String birthDate) { this.birthDate = birthDate; }
     public void setProfessional(boolean professional) { this.professional = professional; }
+    public void setRole(String role) { this.role = role; }
 
 }

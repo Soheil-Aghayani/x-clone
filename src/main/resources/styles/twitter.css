@@ -1,6 +1,6 @@
 .root {
     -fx-background-color: #ffffff;
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-text-fill: #0f1419;
 }
 
@@ -16,7 +16,7 @@
 }
 
 .brand-label, .brand-button {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 32px;
     -fx-text-fill: #0f1419;
     -fx-padding: 0 12 8 12;
@@ -695,7 +695,7 @@
 }
 
 .context-menu .menu-item .label {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 15px;
     -fx-font-weight: bold;
     -fx-text-fill: #0f1419;
@@ -800,21 +800,21 @@
 }
 
 .discovery-section-heading {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-weight: bold;
     -fx-font-size: 21px;
     -fx-text-fill: #0f1419;
 }
 
 .discovery-item-title {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-weight: bold;
     -fx-font-size: 17px;
     -fx-text-fill: #0f1419;
 }
 
 .discovery-item-trend-name {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-weight: bold;
     -fx-font-size: 16px;
     -fx-text-fill: #0f1419;
@@ -858,7 +858,7 @@
     -fx-border-width: 1.5px;
     -fx-border-radius: 999px;
     -fx-text-fill: white;
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 10px;
     -fx-font-weight: bold;
     -fx-min-width: 17px;
@@ -877,21 +877,21 @@
 
 .chat-settings-heading,
 .chat-settings-label {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 14px;
     -fx-font-weight: bold;
     -fx-text-fill: #0f1419;
 }
 
 .chat-settings-detail {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 12px;
     -fx-text-fill: #536471;
 }
 
 .chat-settings-radio,
 .chat-settings-check {
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 14px;
     -fx-text-fill: #0f1419;
     -fx-padding: 4 0;
@@ -917,7 +917,7 @@
 .chat-settings-link {
     -fx-background-color: transparent;
     -fx-text-fill: #0f1419;
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 14px;
     -fx-padding: 9 10;
     -fx-cursor: hand;
@@ -930,7 +930,7 @@
 .chat-danger-link {
     -fx-background-color: transparent;
     -fx-text-fill: #f4212e;
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
     -fx-font-size: 14px;
     -fx-font-weight: bold;
     -fx-padding: 10 0;
@@ -1121,7 +1121,7 @@
 /* Authentication --------------------------------------------------------- */
 .auth-shell {
     -fx-background-color: #000000;
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
 }
 
 .auth-card {
@@ -1304,7 +1304,7 @@
     -fx-background-color: white;
     -fx-background-radius: 20px;
     -fx-effect: dropshadow(gaussian, rgba(15, 20, 25, 0.28), 30, 0.16, 0, 8);
-    -fx-font-family: "Chirp";
+    -fx-font-family: "Geist";
 }
 
 .x-dialog-title {
@@ -1420,4 +1420,100 @@
     -fx-background-color: transparent;
     -fx-shape: " ";
     -fx-padding: 0;
+}
+.media-viewer {
+    -fx-background-color: #000000;
+}
+
+.media-viewer-canvas {
+    -fx-background-color: #000000;
+}
+
+.media-viewer-detail {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #eff3f4;
+    -fx-border-width: 0 0 0 1;
+}
+
+.media-viewer-close,
+.media-viewer-navigation {
+    -fx-background-color: rgba(15, 20, 25, 0.78);
+    -fx-background-radius: 999;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+    -fx-padding: 7 12;
+    -fx-cursor: hand;
+}
+
+.media-viewer-close:hover,
+.media-viewer-navigation:hover {
+    -fx-background-color: rgba(39, 44, 48, 0.92);
+}
+
+.media-viewer-author {
+    -fx-padding: 16;
+    -fx-border-color: #eff3f4;
+    -fx-border-width: 0 0 1 0;
+}
+
+.media-viewer-body {
+    -fx-padding: 16 16 8 16;
+    -fx-text-fill: #0f1419;
+}
+
+.media-viewer-metadata {
+    -fx-padding: 8 16 16 16;
+}
+
+.media-viewer-actions {
+    -fx-padding: 10 16;
+    -fx-border-color: #eff3f4;
+    -fx-border-width: 1 0 1 0;
+}
+
+.media-viewer-action {
+    -fx-background-color: transparent;
+    -fx-text-fill: #536471;
+    -fx-padding: 6 4;
+    -fx-cursor: hand;
+}
+
+.media-viewer-reply {
+    -fx-padding: 14 16;
+    -fx-border-color: #eff3f4;
+    -fx-border-width: 0 0 1 0;
+}
+
+.media-viewer-empty {
+    -fx-padding: 24 16;
+}
+
+.media-viewer-error-title {
+    -fx-text-fill: #e7e9ea;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.media-viewer-retry {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 999;
+    -fx-text-fill: #0f1419;
+    -fx-font-weight: bold;
+    -fx-padding: 9 18;
+    -fx-cursor: hand;
+}
+
+.load-more-posts {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1d9bf0;
+    -fx-font-weight: 600;
+    -fx-padding: 16;
+    -fx-border-color: #eff3f4;
+    -fx-border-width: 0 0 1 0;
+    -fx-cursor: hand;
+}
+
+.load-more-posts:hover {
+    -fx-background-color: #f7f9f9;
 }

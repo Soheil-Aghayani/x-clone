@@ -102,6 +102,8 @@ class ProfileIdentityNavigationTest {
                     "2026-07-24"
             );
             UserSession.getInstance().startSession(current, null);
+            PostStore.getInstance().createPost(
+                    current, "A real test post used for profile navigation.");
             PostStore.getInstance().requestView("home");
 
             Stage stage = new Stage();

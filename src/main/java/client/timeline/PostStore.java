@@ -16,6 +16,7 @@ import shared.models.SharedNotification;
 import shared.models.SharedPost;
 import shared.models.SharedProfile;
 import shared.models.SharedSocialState;
+import shared.models.SharedTrend;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -61,6 +62,7 @@ public final class PostStore {
     private final ReadOnlyLongWrapper clock = new ReadOnlyLongWrapper(Instant.now().getEpochSecond());
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private final SharedSocialClient sharedClient = new SharedSocialClient();
+    private List<SharedTrend> sharedTrends = List.of();
     private final Path stateFile;
     private String requestedHashtag;
     private boolean composerFocusRequested;
@@ -75,8 +77,9 @@ public final class PostStore {
                 ? Path.of(System.getProperty("user.home"), ".x-clone")
                 : Path.of(customDirectory);
         stateFile = dataDirectory.resolve("social-state.json");
-        load();
-        seed();
+        // The backend owns posts, profiles, follows and engagement. Keeping an
+        // old local timeline here caused different users to see different data.
+        // Drafts remain client-local; signed-in social state arrives via sync.
     }
 
     public static PostStore getInstance() { return INSTANCE; }
@@ -88,11 +91,60 @@ public final class PostStore {
     public boolean syncSharedState() {
         if (UserSession.getInstance().getToken() == null) return false;
         try {
-            applySharedState(sharedClient.sync());
+            applySharedState(sharedClient.feed(null, 50, false));
+            try {
+                sharedTrends = sharedClient.trends();
+            } catch (IOException trendFailure) {
+                System.err.println("Could not refresh trends: " + trendFailure.getMessage());
+            }
             return true;
         } catch (IOException exception) {
             System.err.println("Could not sync shared social state: " + exception.getMessage());
             return false;
+        }
+    }
+
+    public boolean searchSharedState(String query, String tab) {
+        if (UserSession.getInstance().getToken() == null) return false;
+        try {
+            applySharedState(sharedClient.search(query, tab, null, 100));
+            return true;
+        } catch (IOException exception) {
+            System.err.println("Could not search shared social state: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    public synchronized List<SharedTrend> getSharedTrends() {
+        return List.copyOf(sharedTrends);
+    }
+
+    public synchronized Set<String> getSharedProfileUsernames() {
+        return Set.copyOf(sharedProfileKeys);
+    }
+
+    public int loadMoreSharedPosts(boolean followingOnly) {
+        if (UserSession.getInstance().getToken() == null) return 0;
+        Long beforeId;
+        synchronized (this) {
+            beforeId = posts.stream()
+                    .filter(PostStore::isShared)
+                    .mapToLong(post -> sharedServerId(post.getId()))
+                    .min()
+                    .stream()
+                    .boxed()
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (beforeId == null) return 0;
+        try {
+            SharedSocialState page = sharedClient.feed(beforeId, 50, followingOnly);
+            int received = page.posts() == null ? 0 : page.posts().size();
+            appendSharedState(page);
+            return received;
+        } catch (IOException exception) {
+            System.err.println("Could not load more posts: " + exception.getMessage());
+            return 0;
         }
     }
 
@@ -794,6 +846,21 @@ public final class PostStore {
                 sharedFollowing.computeIfAbsent(actor, ignored -> new LinkedHashSet<>()).add(target);
             }
         }
+        signalClock();
+    }
+
+    private synchronized void appendSharedState(SharedSocialState state) {
+        if (state == null) return;
+        List<Post> existing = posts.stream().filter(PostStore::isShared).toList();
+        applySharedState(state);
+        Set<Long> received = posts.stream()
+                .filter(PostStore::isShared)
+                .map(Post::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        existing.stream()
+                .filter(post -> !received.contains(post.getId()))
+                .forEach(posts::add);
+        posts.sort(NEWEST_FIRST);
         signalClock();
     }
 

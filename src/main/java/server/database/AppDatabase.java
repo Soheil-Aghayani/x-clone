@@ -51,10 +51,22 @@ public final class AppDatabase {
         return store.createSession(user);
     }
 
+    public SessionUser validateSession(String token) {
+        return store.validateSession(token);
+    }
+
+    public void revokeSession(String token) {
+        store.revokeSession(token);
+    }
+
+    public record SessionUser(User user, Session session) {}
+
     private interface AccountStore {
         User register(String displayName, String username, String email, String password);
         User authenticate(String username, String password);
         Session createSession(User user);
+        SessionUser validateSession(String token);
+        void revokeSession(String token);
         void verifyReady();
         String description();
     }
@@ -78,6 +90,7 @@ public final class AppDatabase {
             }
             jdbcUrl = "jdbc:sqlite:" + databaseFile.toAbsolutePath();
             initializeSchema();
+            ensureUserColumns();
             migrateLegacyJson();
         }
 
@@ -86,8 +99,9 @@ public final class AppDatabase {
                 String displayName, String username, String email, String password) {
             String sql = """
                     INSERT INTO app_users
-                      (username, username_key, email, email_key, display_name, bio, created_at, password_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                      (username, username_key, email, email_key, display_name, bio, created_at,
+                       password_hash, role)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """;
             String hash = BCrypt.withDefaults().hashToString(12, password.toCharArray());
             try (Connection connection = connection();
@@ -97,7 +111,9 @@ public final class AppDatabase {
                 statement.executeUpdate();
                 try (ResultSet keys = statement.getGeneratedKeys()) {
                     if (!keys.next()) throw new SQLException("SQLite returned no user id");
-                    return newUser(keys.getInt(1), username, email, displayName);
+                    User user = newUser(keys.getInt(1), username, email, displayName);
+                    user.setRole(roleFor(username));
+                    return user;
                 }
             } catch (SQLException exception) {
                 if (isUniqueViolation(exception)) return null;
@@ -109,7 +125,7 @@ public final class AppDatabase {
         public synchronized User authenticate(String username, String password) {
             String sql = """
                     SELECT id, username, email, display_name, bio, avatar_url, banner_url, created_at,
-                           location, website, birth_date, professional, password_hash
+                           location, website, birth_date, professional, role, password_hash
                     FROM app_users
                     WHERE username_key = ? OR email_key = ?
                     LIMIT 1
@@ -154,6 +170,61 @@ public final class AppDatabase {
         }
 
         @Override
+        public synchronized SessionUser validateSession(String token) {
+            if (token == null || token.isBlank()) return null;
+            String sql = """
+                    SELECT s.id AS session_id, s.user_id, s.token, s.expires_at,
+                           u.id, u.username, u.email, u.display_name, u.bio, u.avatar_url,
+                           u.banner_url, u.created_at, u.location, u.website, u.birth_date,
+                           u.professional, u.role
+                    FROM app_sessions s
+                    JOIN app_users u ON u.id = s.user_id
+                    WHERE s.token = ? AND u.status = 'active'
+                    LIMIT 1
+                    """;
+            try (Connection connection = connection();
+                 PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, token.trim());
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next()) return null;
+                    LocalDate expiry = LocalDate.parse(result.getString("expires_at"));
+                    if (expiry.isBefore(LocalDate.now())) {
+                        revokeSession(token);
+                        return null;
+                    }
+                    if (!expiry.isAfter(LocalDate.now().plusDays(7))) {
+                        expiry = LocalDate.now().plusDays(30);
+                        try (PreparedStatement refresh = connection.prepareStatement(
+                                "UPDATE app_sessions SET expires_at = ? WHERE id = ?")) {
+                            refresh.setString(1, expiry.toString());
+                            refresh.setInt(2, result.getInt("session_id"));
+                            refresh.executeUpdate();
+                        }
+                    }
+                    User user = user(result);
+                    Session session = new Session(
+                            result.getInt("session_id"), user.getId(), token.trim(), expiry.toString());
+                    return new SessionUser(user, session);
+                }
+            } catch (SQLException exception) {
+                throw databaseFailure("validate session", exception);
+            }
+        }
+
+        @Override
+        public synchronized void revokeSession(String token) {
+            if (token == null || token.isBlank()) return;
+            try (Connection connection = connection();
+                 PreparedStatement statement =
+                         connection.prepareStatement("DELETE FROM app_sessions WHERE token = ?")) {
+                statement.setString(1, token.trim());
+                statement.executeUpdate();
+            } catch (SQLException exception) {
+                throw databaseFailure("revoke session", exception);
+            }
+        }
+
+        @Override
         public void verifyReady() {
             try (Connection connection = connection();
                  Statement statement = connection.createStatement()) {
@@ -183,6 +254,39 @@ public final class AppDatabase {
                 statement.execute(SESSIONS_INDEX);
             } catch (SQLException exception) {
                 throw databaseFailure("initialize SQLite schema", exception);
+            }
+        }
+
+        private void ensureUserColumns() {
+            ensureColumn("ALTER TABLE app_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+            ensureColumn("ALTER TABLE app_users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+            ensureColumn("ALTER TABLE app_users ADD COLUMN is_fake INTEGER NOT NULL DEFAULT 0");
+            bootstrapAdmin();
+        }
+
+        private void ensureColumn(String sql) {
+            try (Connection connection = connection();
+                 Statement statement = connection.createStatement()) {
+                statement.execute(sql);
+            } catch (SQLException exception) {
+                String message = exception.getMessage() == null
+                        ? "" : exception.getMessage().toLowerCase(Locale.ROOT);
+                if (!message.contains("duplicate column") && !message.contains("already exists")) {
+                    throw databaseFailure("migrate user schema", exception);
+                }
+            }
+        }
+
+        private void bootstrapAdmin() {
+            String username = configuredAdminUsername();
+            if (username == null) return;
+            try (Connection connection = connection();
+                 PreparedStatement statement =
+                         connection.prepareStatement("UPDATE app_users SET role = 'admin' WHERE username_key = ?")) {
+                statement.setString(1, normalize(username));
+                statement.executeUpdate();
+            } catch (SQLException exception) {
+                throw databaseFailure("bootstrap administrator", exception);
             }
         }
 
@@ -252,6 +356,7 @@ public final class AppDatabase {
             statement.setString(6, "Hello X!");
             statement.setString(7, LocalDate.now().toString());
             statement.setString(8, hash);
+            statement.setString(9, roleFor(username));
         }
 
         private User user(ResultSet result) throws SQLException {
@@ -269,6 +374,7 @@ public final class AppDatabase {
             user.setWebsite(result.getString("website"));
             user.setBirthDate(result.getString("birth_date"));
             user.setProfessional(result.getInt("professional") != 0);
+            user.setRole(result.getString("role"));
             return user;
         }
     }
@@ -279,14 +385,16 @@ public final class AppDatabase {
         private TursoStore(TursoConfig config) {
             database = new TursoDatabase(config.url(), config.token());
             initializeSchema();
+            ensureUserColumns();
         }
 
         @Override
         public User register(String displayName, String username, String email, String password) {
             String sql = """
                     INSERT INTO app_users
-                      (username, username_key, email, email_key, display_name, bio, created_at, password_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                      (username, username_key, email, email_key, display_name, bio, created_at,
+                       password_hash, role)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """;
             String hash = BCrypt.withDefaults().hashToString(12, password.toCharArray());
             try {
@@ -299,12 +407,15 @@ public final class AppDatabase {
                         displayName.trim(),
                         "Hello X!",
                         LocalDate.now().toString(),
-                        hash
+                        hash,
+                        roleFor(username)
                 );
                 if (result.lastInsertRowId() == null) {
                     throw new IllegalStateException("Turso returned no user id");
                 }
-                return newUser(result.lastInsertRowId().intValue(), username, email, displayName);
+                User user = newUser(result.lastInsertRowId().intValue(), username, email, displayName);
+                user.setRole(roleFor(username));
+                return user;
             } catch (TursoDatabase.DatabaseException exception) {
                 if (exception.isUniqueViolation()) return null;
                 throw exception;
@@ -315,7 +426,7 @@ public final class AppDatabase {
         public User authenticate(String username, String password) {
             String sql = """
                     SELECT id, username, email, display_name, bio, avatar_url, banner_url, created_at,
-                           location, website, birth_date, professional, password_hash
+                           location, website, birth_date, professional, role, password_hash
                     FROM app_users
                     WHERE username_key = ? OR email_key = ?
                     LIMIT 1
@@ -346,6 +457,45 @@ public final class AppDatabase {
         }
 
         @Override
+        public SessionUser validateSession(String token) {
+            if (token == null || token.isBlank()) return null;
+            TursoDatabase.QueryResult result = database.execute("""
+                    SELECT s.id AS session_id, s.user_id, s.token, s.expires_at,
+                           u.id, u.username, u.email, u.display_name, u.bio, u.avatar_url,
+                           u.banner_url, u.created_at, u.location, u.website, u.birth_date,
+                           u.professional, u.role
+                    FROM app_sessions s
+                    JOIN app_users u ON u.id = s.user_id
+                    WHERE s.token = ? AND u.status = 'active'
+                    LIMIT 1
+                    """, token.trim());
+            if (result.rows().isEmpty()) return null;
+            Map<String, String> row = result.rows().getFirst();
+            LocalDate expiry = LocalDate.parse(row.get("expires_at"));
+            if (expiry.isBefore(LocalDate.now())) {
+                revokeSession(token);
+                return null;
+            }
+            if (!expiry.isAfter(LocalDate.now().plusDays(7))) {
+                expiry = LocalDate.now().plusDays(30);
+                database.execute(
+                        "UPDATE app_sessions SET expires_at = ? WHERE id = ?",
+                        expiry.toString(), Integer.parseInt(row.get("session_id")));
+            }
+            User user = user(row);
+            return new SessionUser(user, new Session(
+                    Integer.parseInt(row.get("session_id")),
+                    user.getId(), token.trim(), expiry.toString()));
+        }
+
+        @Override
+        public void revokeSession(String token) {
+            if (token != null && !token.isBlank()) {
+                database.execute("DELETE FROM app_sessions WHERE token = ?", token.trim());
+            }
+        }
+
+        @Override
         public void verifyReady() {
             database.healthCheck();
             database.execute("SELECT 1");
@@ -360,6 +510,30 @@ public final class AppDatabase {
                     new TursoDatabase.SqlStatement(SESSIONS_SCHEMA),
                     new TursoDatabase.SqlStatement(SESSIONS_INDEX)
             ));
+        }
+
+        private void ensureUserColumns() {
+            ensureColumn("ALTER TABLE app_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+            ensureColumn("ALTER TABLE app_users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+            ensureColumn("ALTER TABLE app_users ADD COLUMN is_fake INTEGER NOT NULL DEFAULT 0");
+            String username = configuredAdminUsername();
+            if (username != null) {
+                database.execute(
+                        "UPDATE app_users SET role = 'admin' WHERE username_key = ?",
+                        normalize(username));
+            }
+        }
+
+        private void ensureColumn(String sql) {
+            try {
+                database.execute(sql);
+            } catch (TursoDatabase.DatabaseException exception) {
+                String message = exception.getMessage() == null
+                        ? "" : exception.getMessage().toLowerCase(Locale.ROOT);
+                if (!message.contains("duplicate column") && !message.contains("already exists")) {
+                    throw exception;
+                }
+            }
         }
 
         private User user(Map<String, String> row) {
@@ -378,6 +552,7 @@ public final class AppDatabase {
             user.setBirthDate(row.get("birth_date"));
             user.setProfessional("1".equals(row.get("professional"))
                     || "true".equalsIgnoreCase(row.get("professional")));
+            user.setRole(row.get("role"));
             return user;
         }
     }
@@ -425,6 +600,18 @@ public final class AppDatabase {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
+    private static String configuredAdminUsername() {
+        return firstNonBlank(
+                System.getProperty("xclone.admin.username"),
+                System.getenv("XCLONE_ADMIN_USERNAME"));
+    }
+
+    private static String roleFor(String username) {
+        String configured = configuredAdminUsername();
+        return configured != null && normalize(configured).equals(normalize(username))
+                ? "admin" : "user";
+    }
+
     private static final String USERS_SCHEMA = """
             CREATE TABLE IF NOT EXISTS app_users (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -441,6 +628,9 @@ public final class AppDatabase {
               website TEXT,
               birth_date TEXT,
               professional INTEGER NOT NULL DEFAULT 0,
+              role TEXT NOT NULL DEFAULT 'user',
+              status TEXT NOT NULL DEFAULT 'active',
+              is_fake INTEGER NOT NULL DEFAULT 0,
               password_hash TEXT NOT NULL
             )
             """;

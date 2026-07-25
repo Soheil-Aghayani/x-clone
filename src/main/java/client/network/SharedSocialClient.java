@@ -1,9 +1,12 @@
 package client.network;
 
 import client.UserSession;
+import client.media.MediaLibrary;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import shared.models.SharedSocialState;
+import shared.models.SharedTrend;
+import shared.models.SocialSettings;
 import shared.models.User;
 import shared.protocol.Request;
 import shared.protocol.RequestType;
@@ -12,6 +15,7 @@ import shared.protocol.StatusCode;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.List;
 
 /** Authenticated client for social state shared by local and hosted backends. */
 public final class SharedSocialClient {
@@ -29,7 +33,8 @@ public final class SharedSocialClient {
             Long quotedPostId) throws IOException {
         JsonObject payload = payload();
         payload.addProperty("content", content == null ? "" : content);
-        if (mediaUri != null) payload.addProperty("mediaUri", mediaUri);
+        String durableMedia = ensureDurableMedia(mediaUri);
+        if (durableMedia != null) payload.addProperty("mediaUri", durableMedia);
         RequestType type = replyToId != null
                 ? RequestType.CREATE_REPLY
                 : quotedPostId != null ? RequestType.CREATE_QUOTE : RequestType.CREATE_POST;
@@ -65,9 +70,50 @@ public final class SharedSocialClient {
     }
 
     public SharedSocialState updateProfile(User profile) throws IOException {
+        profile.setAvatarUrl(ensureDurableMedia(profile.getAvatarUrl()));
+        profile.setBannerUrl(ensureDurableMedia(profile.getBannerUrl()));
         JsonObject payload = payload();
         payload.add("profile", gson.toJsonTree(profile));
         return send(RequestType.UPDATE_PROFILE, payload);
+    }
+
+    public SharedSocialState feed(Long beforeId, int limit, boolean followingOnly) throws IOException {
+        JsonObject payload = payload();
+        if (beforeId != null) payload.addProperty("beforeId", beforeId);
+        payload.addProperty("limit", limit);
+        payload.addProperty("followingOnly", followingOnly);
+        return send(RequestType.GET_FEED, payload);
+    }
+
+    public SharedSocialState search(
+            String query, String tab, Long beforeId, int limit) throws IOException {
+        JsonObject payload = payload();
+        payload.addProperty("query", query == null ? "" : query);
+        payload.addProperty("tab", tab == null ? "top" : tab);
+        if (beforeId != null) payload.addProperty("beforeId", beforeId);
+        payload.addProperty("limit", limit);
+        return send(RequestType.SEARCH_SOCIAL, payload);
+    }
+
+    public List<SharedTrend> trends() throws IOException {
+        Response response = sendRaw(RequestType.GET_TRENDS, payload());
+        try {
+            return List.of(gson.fromJson(response.getPayload(), SharedTrend[].class));
+        } catch (RuntimeException exception) {
+            throw new IOException("The backend returned invalid trends.", exception);
+        }
+    }
+
+    public SocialSettings settings() throws IOException {
+        Response response = sendRaw(RequestType.GET_SETTINGS, payload());
+        return gson.fromJson(response.getPayload(), SocialSettings.class);
+    }
+
+    public SocialSettings updateFakeContent(boolean enabled) throws IOException {
+        JsonObject payload = payload();
+        payload.addProperty("fakeContentEnabled", enabled);
+        Response response = sendRaw(RequestType.UPDATE_SETTINGS, payload);
+        return gson.fromJson(response.getPayload(), SocialSettings.class);
     }
 
     private SharedSocialState postAction(RequestType type, long postId) throws IOException {
@@ -85,6 +131,15 @@ public final class SharedSocialClient {
     }
 
     private SharedSocialState send(RequestType type, JsonObject payload) throws IOException {
+        Response response = sendRaw(type, payload);
+        try {
+            return gson.fromJson(response.getPayload(), SharedSocialState.class);
+        } catch (RuntimeException exception) {
+            throw new IOException("The shared backend returned invalid social data.", exception);
+        }
+    }
+
+    private Response sendRaw(RequestType type, JsonObject payload) throws IOException {
         Response response = connection.sendMessage(
                 new Request(UUID.randomUUID().toString(), type, payload));
         if (response.getStatus() != StatusCode.OK || response.getPayload() == null) {
@@ -93,10 +148,20 @@ public final class SharedSocialClient {
                     ? "The shared backend rejected the request."
                     : message);
         }
-        try {
-            return gson.fromJson(response.getPayload(), SharedSocialState.class);
-        } catch (RuntimeException exception) {
-            throw new IOException("The shared backend returned invalid social data.", exception);
-        }
+        return response;
+    }
+
+    private String ensureDurableMedia(String mediaUri) throws IOException {
+        if (mediaUri == null || mediaUri.isBlank()) return null;
+        MediaLibrary.UploadPayload upload = MediaLibrary.uploadPayload(mediaUri);
+        if (upload == null) return mediaUri;
+        JsonObject payload = payload();
+        payload.addProperty("mimeType", upload.mimeType());
+        payload.addProperty("originalName", upload.originalName());
+        payload.addProperty("data", upload.base64Data());
+        Response response = sendRaw(RequestType.UPLOAD_MEDIA, payload);
+        JsonObject result = response.getPayload().getAsJsonObject();
+        if (!result.has("mediaUri")) throw new IOException("The backend did not save the media.");
+        return result.get("mediaUri").getAsString();
     }
 }

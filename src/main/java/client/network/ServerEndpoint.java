@@ -5,11 +5,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 
-/** Resolves the backend URL without baking a deployment address into the app. */
+/** Resolves the hosted backend URL, while retaining explicit local overrides for development. */
 public final class ServerEndpoint {
     public static final String PROPERTY = "xclone.server.url";
     public static final String ENVIRONMENT = "XCLONE_SERVER_URL";
-    private static final String DEFAULT_URL = "http://127.0.0.1:8080";
+    private static final String DEFAULT_URL = "https://x-clone.alirezalotfimoghaddam.ir";
 
     private ServerEndpoint() {}
 
@@ -32,6 +32,7 @@ public final class ServerEndpoint {
 
     public static URI apiUri() { return URI.create(baseUri() + "/api/request"); }
     public static URI healthUri() { return URI.create(baseUri() + "/health"); }
+    public static URI mediaUri(long id) { return URI.create(baseUri() + "/api/media/" + id); }
 
     public static boolean isLocal() {
         String host = baseUri().getHost().toLowerCase(Locale.ROOT);

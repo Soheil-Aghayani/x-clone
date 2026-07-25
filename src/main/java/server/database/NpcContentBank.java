@@ -15,16 +15,36 @@ final class NpcContentBank {
     private NpcContentBank() {}
 
     static final List<Personality> PERSONALITIES = List.of(
-            new Personality("xclone_maya", "Maya Chen", "Developer notes, shipped by an automated demo account.", Topic.DEVELOPMENT),
-            new Personality("xclone_noah", "Noah Williams", "Product design observations from an automated demo account.", Topic.DESIGN),
-            new Personality("xclone_leila", "Leila Farahani", "Science and space updates from an automated demo account.", Topic.SCIENCE),
-            new Personality("xclone_aria", "Aria Santos", "Game-development thoughts from an automated demo account.", Topic.GAMING),
-            new Personality("xclone_theo", "Theo Martin", "Sports conversations from an automated demo account.", Topic.SPORTS),
-            new Personality("xclone_nora", "Nora Okafor", "Photography notes from an automated demo account.", Topic.PHOTOGRAPHY),
-            new Personality("xclone_sam", "Sam Rivera", "Music discoveries from an automated demo account.", Topic.MUSIC),
-            new Personality("xclone_iman", "Iman Darzi", "Books and writing from an automated demo account.", Topic.BOOKS),
-            new Personality("xclone_ren", "Ren Ito", "Practical security notes from an automated demo account.", Topic.SECURITY),
-            new Personality("xclone_zara", "Zara Morgan", "Startup lessons from an automated demo account.", Topic.STARTUPS)
+            new Personality("xclone_maya", "Maya Chen",
+                    "Desktop engineer. Java, calm interfaces, and bugs worth writing down.",
+                    "Vancouver", Topic.DEVELOPMENT),
+            new Personality("xclone_noah", "Noah Williams",
+                    "Product designer working on accessible systems and thoughtful details.",
+                    "London", Topic.DESIGN),
+            new Personality("xclone_leila", "Leila Farahani",
+                    "Astrophysicist translating big questions into clear pictures.",
+                    "Tehran", Topic.SCIENCE),
+            new Personality("xclone_aria", "Aria Santos",
+                    "Indie game developer building small worlds with surprising rules.",
+                    "São Paulo", Topic.GAMING),
+            new Personality("xclone_theo", "Theo Martin",
+                    "Football analyst. Shape, movement, and the decisions behind the score.",
+                    "Paris", Topic.SPORTS),
+            new Personality("xclone_nora", "Nora Okafor",
+                    "Street photographer following light, weather, and ordinary moments.",
+                    "Lagos · London", Topic.PHOTOGRAPHY),
+            new Personality("xclone_sam", "Sam Rivera",
+                    "Independent musician collecting sounds, arrangements, and late-night demos.",
+                    "Manila", Topic.MUSIC),
+            new Personality("xclone_iman", "Iman Darzi",
+                    "Novelist, reader, and enthusiastic defender of marginal notes.",
+                    "Tehran", Topic.BOOKS),
+            new Personality("xclone_ren", "Ren Ito",
+                    "Security engineer making threat models useful to the people shipping software.",
+                    "Tokyo", Topic.SECURITY),
+            new Personality("xclone_zara", "Zara Morgan",
+                    "Founder sharing the practical lessons between an idea and a useful product.",
+                    "Toronto", Topic.STARTUPS)
     );
 
     private static final Map<Topic, TopicCopy> COPY = Map.of(
@@ -292,11 +312,39 @@ final class NpcContentBank {
         return "@" + targetUsername + " " + body;
     }
 
+    static String media(Personality personality, Random random) {
+        if (random.nextInt(100) >= 58) return null;
+        List<String> media = personality.mediaUris();
+        return media.get(random.nextInt(media.size()));
+    }
+
     private static String choose(List<String> values, Random random) {
         return values.get(random.nextInt(values.size()));
     }
 
-    record Personality(String username, String displayName, String bio, Topic topic) {}
+    record Personality(
+            String username,
+            String displayName,
+            String bio,
+            String location,
+            Topic topic) {
+        String slug() {
+            return username.substring("xclone_".length());
+        }
+
+        String avatarUri() {
+            return "/images/npc/avatars/" + slug() + ".jpg";
+        }
+
+        String bannerUri() {
+            return "/images/npc/banners/" + slug() + ".jpg";
+        }
+
+        List<String> mediaUris() {
+            String root = "/images/npc/media/" + slug() + "-";
+            return List.of(root + "1.jpg", root + "2.jpg", root + "3.jpg");
+        }
+    }
     private record TopicCopy(List<String> thoughts, List<String> followUps, List<String> tags) {}
     private enum Topic { DEVELOPMENT, DESIGN, SCIENCE, GAMING, SPORTS, PHOTOGRAPHY, MUSIC, BOOKS, SECURITY, STARTUPS }
 }

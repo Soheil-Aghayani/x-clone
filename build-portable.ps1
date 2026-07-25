@@ -1,5 +1,5 @@
 param(
-    [string]$ServerUrl = ""
+    [string]$ServerUrl = "https://x-clone.alirezalotfimoghaddam.ir"
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,7 +68,12 @@ try {
         if (-not $ServerUrl.StartsWith("https://", [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "ServerUrl must begin with https:// for a shared build."
         }
-        Set-Content -LiteralPath (Join-Path $appDir "server-url.txt") -Value $ServerUrl.Trim() -Encoding utf8NoBOM
+        $serverUrlFile = Join-Path $appDir "server-url.txt"
+        $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText(
+            $serverUrlFile,
+            $ServerUrl.Trim() + [Environment]::NewLine,
+            $utf8WithoutBom)
     }
     if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
     Compress-Archive -LiteralPath $appDir -DestinationPath $zip -CompressionLevel Optimal

@@ -3,6 +3,7 @@ package server.network;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import server.database.AppDatabase;
+import server.database.SocialDatabase;
 import server.service.ApiService;
 import shared.protocol.MessageCodec;
 import shared.protocol.Response;
@@ -16,7 +17,7 @@ import java.util.concurrent.Executors;
 
 public class server {
     private static final int DEFAULT_PORT = 8080;
-    private static final int MAX_REQUEST_BYTES = 64 * 1024;
+    private static final int MAX_REQUEST_BYTES = 12 * 1024 * 1024;
     private static final ApiService API = new ApiService();
 
     public static void main(String[] args) {
@@ -39,6 +40,7 @@ public class server {
         HttpServer httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         httpServer.createContext("/health", server::health);
         httpServer.createContext("/api/request", server::request);
+        httpServer.createContext("/api/media/", server::media);
         httpServer.setExecutor(Executors.newFixedThreadPool(
                 Math.max(2, Runtime.getRuntime().availableProcessors()),
                 runnable -> {
@@ -91,6 +93,37 @@ public class server {
             response = Response.error(null, StatusCode.BAD_REQUEST, "Malformed JSON request.");
         }
         send(exchange, httpStatus(response.getStatus()), MessageCodec.encodeResponse(response));
+    }
+
+    private static void media(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+            send(exchange, 405, "{\"status\":\"method_not_allowed\"}");
+            return;
+        }
+        String path = exchange.getRequestURI().getPath();
+        String value = path.substring("/api/media/".length());
+        long id;
+        try {
+            id = Long.parseLong(value);
+            if (id < 1) throw new NumberFormatException();
+        } catch (NumberFormatException exception) {
+            send(exchange, 404, "{\"status\":\"not_found\"}");
+            return;
+        }
+        SocialDatabase.MediaAsset asset = SocialDatabase.getInstance().media(id);
+        if (asset == null) {
+            send(exchange, 404, "{\"status\":\"not_found\"}");
+            return;
+        }
+        exchange.getResponseHeaders().set("Content-Type", asset.mimeType());
+        exchange.getResponseHeaders().set("Cache-Control", "public, max-age=31536000, immutable");
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.sendResponseHeaders(200, asset.bytes().length);
+        try (var output = exchange.getResponseBody()) {
+            output.write(asset.bytes());
+        } finally {
+            exchange.close();
+        }
     }
 
     private static int httpStatus(StatusCode status) {

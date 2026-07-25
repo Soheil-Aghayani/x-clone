@@ -14,6 +14,7 @@ import client.ui.PostInteractions;
 import client.ui.ProfileHoverCard;
 import client.ui.PollView;
 import client.ui.EditProfileDialog;
+import client.ui.MediaViewer;
 import javafx.beans.binding.Bindings;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -485,6 +486,13 @@ public class ProfileController {
                 image.setFitWidth(480);
                 image.setFitHeight(320);
                 image.setPreserveRatio(true);
+                image.setSmooth(true);
+                image.setStyle("-fx-cursor: hand;");
+                image.setAccessibleText("Open media from @" + post.getAuthorUsername());
+                image.setOnMouseClicked(event -> {
+                    event.consume();
+                    MediaViewer.show(image.getScene().getWindow(), post, postStore.getAllPosts());
+                });
                 content.getChildren().add(image);
             } else {
                 Label unavailable = new Label("Media unavailable · " + MediaLibrary.displayName(post.getMediaUri())
@@ -745,7 +753,7 @@ public class ProfileController {
 
     @FXML
     private void handleLogout() {
-        UserSession.getInstance().clearSession();
+        UserSession.getInstance().logout();
         NavigationManager.switchScene("/views/Login.fxml");
     }
 

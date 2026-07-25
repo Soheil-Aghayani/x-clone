@@ -6,6 +6,7 @@ import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import javafx.application.Platform;
 
 public class MainApp extends Application {
     private static MainApp instance;
@@ -38,6 +39,15 @@ public class MainApp extends Application {
 
         NavigationManager.switchScene("/views/Login.fxml");
         stage.show();
+        if (UserSession.getInstance().hasSavedSession()) {
+            Thread restore = new Thread(() -> {
+                if (UserSession.getInstance().restoreSavedSession()) {
+                    Platform.runLater(() -> NavigationManager.switchScene("/views/Feed.fxml"));
+                }
+            }, "x-session-restore");
+            restore.setDaemon(true);
+            restore.start();
+        }
     }
 
     public void setPageTitle(String pageTitle) {

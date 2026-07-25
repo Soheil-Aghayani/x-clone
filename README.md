@@ -27,9 +27,9 @@ X Clone recreates the main X desktop experience in a native application. It comb
 | Profiles | Avatars, banners, bios, follower counts, post history, profile navigation, and follow controls |
 | Conversations | Full post threads, nested replies, quote posts, reposts, likes, bookmarks, menus, counters, and interaction animations |
 | Discovery | Notifications, mentions, search, trends, news, sports, and entertainment views |
-| Living demo network | Ten labelled NPC personalities share one global stream of generated posts, replies, reactions, follows, and views |
+| Optional demo network | Ten distinct NPC personalities can share one global stream, but fake content is disabled by default and can only be enabled by a database administrator |
 | Chat | Passcode flow, inbox filters, message settings, and NPC-only automatic replies |
-| International text | Chirp for Latin text and Vazirmatn for Persian and other complex scripts |
+| International text | Geist 400/600 for the interface, with Vazirmatn fallback for Persian and other complex scripts |
 | Desktop | Responsive JavaFX layout, X-inspired styling, and a portable Windows package |
 
 <details>
@@ -37,7 +37,8 @@ X Clone recreates the main X desktop experience in a native application. It comb
 
 - Dynamic notification badges in the sidebar and window title
 - Clickable avatars, display names, and usernames
-- Profile-picture fallbacks and animated GIF media
+- Durable server-hosted profile pictures, post images, and animated GIF media
+- Full-screen X-style media viewer with conversation panel, navigation, loading, retry, and error states
 - Character countdown warnings and disabled posting beyond the limit
 - Account menu, password-visibility controls, custom dialogs, and secure chat passcodes
 - Empty states for notifications, mentions, bookmarks, and conversations
@@ -65,7 +66,7 @@ The desktop app starts an embedded backend automatically. Local accounts and sha
 %USERPROFILE%\.x-clone-server\xclone.db
 ```
 
-Client-only preferences, drafts, chats, and cached media are stored in:
+Client-only preferences, drafts, chats, cached media, and the restorable session token are stored in:
 
 ```text
 %USERPROFILE%\.x-clone
@@ -114,34 +115,35 @@ When every desktop client uses the same public backend URL, these features are s
 - likes, reposts, and bookmarks
 - follow relationships
 - notifications, mentions, and read state
-- one shared NPC ecosystem that stays consistent for every connected user
+- uploaded post media, profile pictures, banners, and GIFs
+- server-derived user search, feed discovery, suggestions, hashtags, and trends
+- the optional shared NPC ecosystem when an administrator enables it
 
 These parts remain local to each desktop for now:
 
-- selected local image/GIF files unless the media value is already a public HTTPS URL
-- drafts, polls, hidden/muted preferences, and seeded demo content
+- drafts, polls, hidden/muted preferences, and temporary media cache
 - chat messages, passcodes, and chat settings
 
 > [!NOTE]
-> The backend is now the source of truth for the core social network. Object storage is still needed before files selected from one computer can be viewed on every other computer.
+> The backend is the source of truth for the core social network. Selected PNG, JPEG, and GIF files are uploaded through the authenticated API and served from stable media endpoints, so another computer can display them.
 
 ### Living demo network
 
-The backend creates ten clearly labelled automated demo accounts. Their original content is assembled from topic-specific banks covering development, design, science, gaming, sports, photography, music, books, security, and startups. The combinations provide thousands of possible posts.
+The backend can create ten clearly labelled automated demo accounts. Their original content is assembled from topic-specific banks covering development, design, science, gaming, sports, photography, music, books, security, and startups. The combinations provide thousands of possible posts.
 
-Every activity interval, the shared backend may publish a post or reply, like, repost, bookmark, follow another demo account, or increase views. Activity is stored in Turso, so all clients see the same posts and engagement instead of receiving separate local simulations. Desktop clients check for shared updates every 45 seconds while the app is open.
+Every personality has a bundled portrait, profile cover, location, human-style bio, and three topic-specific media photographs. Fake content is **off by default**. An account whose `role` column is `admin` can enable it from **More → Settings and privacy**; the backend rejects the same request from ordinary users. The switch is stored in the database and affects every client.
 
 The default activity interval is 15 minutes. It can be changed on the backend with `XCLONE_NPC_INTERVAL_SECONDS`; production values are limited to at least 60 seconds. When a free host sleeps, activity safely catches up by a limited number of intervals on the next authenticated sync—no separate cron service is required.
 
 ## Portable Windows build
 
-Create a local-only package:
+Create a package connected to the public X Clone backend:
 
 ```powershell
 .\build-portable.ps1
 ```
 
-Create a package connected to your public Render backend:
+The default address is `https://x-clone.alirezalotfimoghaddam.ir`. To target a different hosted backend:
 
 ```powershell
 .\build-portable.ps1 -ServerUrl "https://YOUR-SERVICE.onrender.com"
@@ -172,12 +174,13 @@ Backend environment variables:
 | `TURSO_DATABASE_URL` | Hosted `libsql://` database address |
 | `TURSO_AUTH_TOKEN` | Private Turso token stored in Render environment variables |
 | `XCLONE_NPC_INTERVAL_SECONDS` | Optional shared NPC activity interval; defaults to `900` seconds |
+| `XCLONE_ADMIN_USERNAME` | Optional username to bootstrap as a database-backed administrator, for example `potato` |
 
 Desktop client settings:
 
 | Setting | Purpose |
 | --- | --- |
-| `XCLONE_SERVER_URL` | Public Render HTTPS URL |
+| `XCLONE_SERVER_URL` | Optional public HTTPS URL override; defaults to `https://x-clone.alirezalotfimoghaddam.ir` |
 | `server-url.txt` | Portable-build alternative to the environment variable |
 
 > [!CAUTION]

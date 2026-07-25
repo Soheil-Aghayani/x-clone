@@ -7,6 +7,7 @@ import java.util.Random;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcContentBankTest {
@@ -15,6 +16,12 @@ class NpcContentBankTest {
         assertEquals(10, NpcContentBank.PERSONALITIES.size());
 
         for (NpcContentBank.Personality personality : NpcContentBank.PERSONALITIES) {
+            assertNotNull(NpcContentBank.class.getResource(personality.avatarUri()));
+            assertNotNull(NpcContentBank.class.getResource(personality.bannerUri()));
+            assertEquals(3, personality.mediaUris().stream().distinct().count());
+            personality.mediaUris().forEach(uri ->
+                    assertNotNull(NpcContentBank.class.getResource(uri), uri));
+
             Random random = new Random(personality.username().hashCode());
             Set<String> posts = new HashSet<>();
             for (int index = 0; index < 200; index++) {

@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 public final class AppFonts {
-    public static final String LATIN_FAMILY = "Chirp";
+    public static final String LATIN_FAMILY = "Geist";
     public static final String COMPLEX_FAMILY = "Vazirmatn";
 
     private static final Pattern ARABIC_SCRIPT = Pattern.compile(
@@ -22,9 +22,8 @@ public final class AppFonts {
         }
 
         List<String> resources = List.of(
-                "/fonts/Chirp-Regular.ttf",
-                "/fonts/Chirp-Medium.ttf",
-                "/fonts/Chirp-Bold.ttf",
+                "/fonts/Geist-Regular.ttf",
+                "/fonts/Geist-SemiBold.ttf",
                 "/fonts/Vazirmatn-Regular.ttf"
         );
 

@@ -75,8 +75,9 @@ Optional:
 | Key | Value |
 | --- | --- |
 | `XCLONE_NPC_INTERVAL_SECONDS` | `900` for one shared demo activity slot every 15 minutes |
+| `XCLONE_ADMIN_USERNAME` | `potato` if that existing account should receive the database `admin` role |
 
-The NPC network advances when authenticated clients synchronize. All activity is written to Turso and is therefore identical for every user. A separate cron service is not required.
+Fake content is disabled by default. After signing in with the configured administrator, open **More → Settings and privacy** to enable or disable the shared demo network. The setting is stored in Turso, applies to every user, and cannot be changed by a normal account.
 
 Click **Deploy Web Service** and wait for the first build to finish.
 
@@ -114,11 +115,12 @@ If deployment fails, check **Logs** in Render first. The most common causes are:
 For a Maven development run:
 
 ```powershell
-$env:XCLONE_SERVER_URL = "https://x-clone-xxxx.onrender.com"
+$env:XCLONE_SERVER_URL = "https://x-clone.alirezalotfimoghaddam.ir"
 mvn javafx:run
 ```
 
-To remove the setting later:
+The desktop client already uses that domain by default. The environment variable
+is only needed when testing a different deployment. To remove an override later:
 
 ```powershell
 Remove-Item Env:XCLONE_SERVER_URL
@@ -127,8 +129,11 @@ Remove-Item Env:XCLONE_SERVER_URL
 ## 7. Build a ZIP for other people
 
 ```powershell
-.\build-portable.ps1 -ServerUrl "https://x-clone-xxxx.onrender.com"
+.\build-portable.ps1
 ```
+
+That command embeds `https://x-clone.alirezalotfimoghaddam.ir`. Use
+`-ServerUrl "https://another-host.example"` only for a different backend.
 
 Send:
 
@@ -150,10 +155,13 @@ Backend URL priority:
 1. Java property `-Dxclone.server.url=...`
 2. Environment variable `XCLONE_SERVER_URL`
 3. `server-url.txt` beside the packaged executable
-4. Local default `http://127.0.0.1:8080`
+4. Hosted default `https://x-clone.alirezalotfimoghaddam.ir`
+
+The repository's `launch.ps1` explicitly selects `http://127.0.0.1:8080` for
+local backend development; portable builds do not use that local address.
 
 ## 8. Understand the current deployment limitation
 
 Render auto-deploy works only after the service is connected to the correct GitHub repository and branch. Until that is configured, pushing code updates GitHub and runs CI but does not update the public backend.
 
-Core social data is shared through Turso: accounts, profiles, posts, replies, quotes, likes, reposts, bookmarks, follows, and notifications. Local files selected as avatars or post media are not uploaded to cloud object storage yet, so other computers cannot load those files. Chat, drafts, polls, and some personal preferences also remain local.
+Core social data is shared through Turso: accounts, sessions, profiles, posts, replies, quotes, likes, reposts, bookmarks, follows, notifications, media metadata, and uploaded PNG/JPEG/GIF bytes. Chat, drafts, polls, temporary cache, and some personal preferences remain local.

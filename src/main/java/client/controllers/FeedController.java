@@ -7,6 +7,7 @@ import client.MainApp;
 import client.UserSession;
 import client.chat.ChatStore;
 import client.media.MediaLibrary;
+import client.network.SharedSocialClient;
 import client.profile.AccountDirectory;
 import client.profile.AccountProfile;
 import client.timeline.Post;
@@ -15,6 +16,7 @@ import client.timeline.NotificationItem;
 import client.ui.PostComposerDialog;
 import client.ui.PostInteractions;
 import client.ui.ProfileHoverCard;
+import client.ui.MediaViewer;
 import client.ui.PollComposerDialog;
 import client.ui.PollView;
 import client.ui.XDialog;
@@ -68,6 +70,7 @@ import javafx.stage.StageStyle;
 import javafx.stage.Window;
 import javafx.scene.Scene;
 import shared.models.User;
+import shared.models.SharedTrend;
 
 import java.io.File;
 import java.io.IOException;
@@ -82,6 +85,7 @@ public class FeedController {
     private static final String INACTIVE_ACTION_STYLE = "-fx-background-color: transparent; -fx-text-fill: #536471; -fx-padding: 5 4; -fx-cursor: hand;";
 
     private final PostStore postStore = PostStore.getInstance();
+    private final SharedSocialClient sharedSocialClient = new SharedSocialClient();
     private String activeHashtag;
     private String viewMode = "home";
     private String searchQuery = "";
@@ -98,6 +102,7 @@ public class FeedController {
     private int lastUnreadNotificationCount = -1;
     private boolean sharedSyncInProgress;
     private Timeline sharedRefreshTimeline;
+    private Timeline searchDebounce;
 
     @FXML
     private TextArea tweetTextArea;
@@ -190,10 +195,12 @@ public class FeedController {
         searchField.textProperty().addListener((observable, oldText, newText) -> {
             searchQuery = newText == null ? "" : newText.trim();
             refreshTimeline();
+            scheduleRemoteSearch();
         });
         centerSearchField.textProperty().addListener((observable, oldText, newText) -> {
             searchQuery = newText == null ? "" : newText.trim();
             if (viewMode.equals("explore")) refreshTimeline();
+            scheduleRemoteSearch();
         });
         refreshFollowButtons();
         refreshTimeline();
@@ -224,6 +231,8 @@ public class FeedController {
             sharedSyncInProgress = false;
             if (Boolean.TRUE.equals(task.getValue())) {
                 refreshFollowButtons();
+                populateSuggestionWidget();
+                populateTrendsWidget();
                 refreshTimeline();
                 if (preserveScroll && previousView.equals(viewMode)) {
                     Platform.runLater(() -> contentScroll.setVvalue(previousScroll));
@@ -235,6 +244,32 @@ public class FeedController {
         Thread thread = new Thread(task, "x-shared-social-sync");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    private void scheduleRemoteSearch() {
+        if (UserSession.getInstance().getToken() == null) return;
+        if (searchDebounce != null) searchDebounce.stop();
+        searchDebounce = new Timeline(new KeyFrame(Duration.millis(350), event -> {
+            String requested = searchQuery;
+            if (requested.isBlank()) {
+                refreshSharedSocialState(true);
+                return;
+            }
+            Task<Boolean> task = new Task<>() {
+                @Override protected Boolean call() {
+                    return postStore.searchSharedState(requested, searchResultTab);
+                }
+            };
+            task.setOnSucceeded(done -> {
+                if (requested.equals(searchQuery) && Boolean.TRUE.equals(task.getValue())) {
+                    refreshTimeline();
+                }
+            });
+            Thread thread = new Thread(task, "x-remote-search");
+            thread.setDaemon(true);
+            thread.start();
+        }));
+        searchDebounce.play();
     }
 
     private void startSharedRefresh() {
@@ -324,7 +359,13 @@ public class FeedController {
         Label title = new Label("You might like");
         title.getStyleClass().add("widget-title");
         suggestionWidget.getChildren().add(title);
-        for (String username : List.of("laylacodes", "marcusux", "minapixels")) {
+        List<String> suggestions = postStore.getSharedProfileUsernames().stream()
+                .filter(username -> !username.equalsIgnoreCase(UserSession.getInstance().getUsername()))
+                .filter(username -> !UserSession.getInstance().isFollowing(username))
+                .sorted()
+                .limit(3)
+                .toList();
+        for (String username : suggestions) {
             AccountProfile account = AccountDirectory.find(username);
             HBox row = new HBox(10);
             row.setAlignment(Pos.CENTER_LEFT);
@@ -345,12 +386,14 @@ public class FeedController {
             ProfileHoverCard.attachIdentity(avatar, name, handle, username, () -> openProfile(username));
             suggestionWidget.getChildren().add(row);
         }
-        Label more = new Label("Show more");
+        Label more = new Label(suggestions.isEmpty() ? "No suggestions yet" : "Show more");
         more.getStyleClass().add("show-more");
-        more.setOnMouseClicked(event -> {
-            exploreTab = "Who to follow";
-            handleShowExplore();
-        });
+        if (!suggestions.isEmpty()) {
+            more.setOnMouseClicked(event -> {
+                exploreTab = "Who to follow";
+                handleShowExplore();
+            });
+        }
         suggestionWidget.getChildren().add(more);
     }
 
@@ -361,11 +404,14 @@ public class FeedController {
         title.getStyleClass().add("widget-title");
         trendsWidget.getChildren().add(title);
 
-        List<String[]> trendData = List.of(
-            new String[]{"Technology · Trending", "#JavaFX", "12.8K posts"},
-            new String[]{"Trending", "#Design", "8,420 posts"},
-            new String[]{"Software · Trending", "Desktop apps", "4,218 posts"}
-        );
+        List<String[]> trendData = postStore.getSharedTrends().stream()
+                .limit(3)
+                .map(trend -> new String[]{
+                        "Trending",
+                        trend.hashtag(),
+                        trend.postCount() + (trend.postCount() == 1 ? " post" : " posts")
+                })
+                .toList();
 
         for (String[] data : trendData) {
             VBox item = new VBox(2);
@@ -379,6 +425,12 @@ public class FeedController {
             item.getChildren().addAll(category, name, posts);
             item.setOnMouseClicked(event -> triggerExploreSearch(data[1]));
             trendsWidget.getChildren().add(item);
+        }
+        if (trendData.isEmpty()) {
+            Label empty = new Label("Trends appear as people use hashtags.");
+            empty.setWrapText(true);
+            empty.getStyleClass().add("secondary-text");
+            trendsWidget.getChildren().add(empty);
         }
 
         Label more = new Label("Show more");
@@ -882,6 +934,38 @@ public class FeedController {
             timelineContainer.getChildren().add(createPostCard(post));
         }
 
+        if (searchQuery.isBlank() && activeHashtag == null && posts.size() >= 50) {
+            Button loadMore = new Button("Load more posts");
+            loadMore.getStyleClass().add("load-more-posts");
+            loadMore.setMaxWidth(Double.MAX_VALUE);
+            loadMore.setOnAction(event -> {
+                loadMore.setDisable(true);
+                loadMore.setText("Loading…");
+                Task<Integer> task = new Task<>() {
+                    @Override protected Integer call() {
+                        return postStore.loadMoreSharedPosts(
+                                viewMode.equals("home") && homeTab.equals("Following"));
+                    }
+                };
+                task.setOnSucceeded(done -> {
+                    if (task.getValue() > 0) {
+                        refreshTimeline();
+                    } else {
+                        loadMore.setText("You’re all caught up");
+                        loadMore.setDisable(true);
+                    }
+                });
+                task.setOnFailed(done -> {
+                    loadMore.setText("Try again");
+                    loadMore.setDisable(false);
+                });
+                Thread loader = new Thread(task, "x-feed-pagination");
+                loader.setDaemon(true);
+                loader.start();
+            });
+            timelineContainer.getChildren().add(loadMore);
+        }
+
         if (posts.isEmpty()) {
             timelineContainer.getChildren().add(createEmptyState(headerTitle));
         }
@@ -995,12 +1079,42 @@ public class FeedController {
             return;
         }
 
+        if (!exploreTab.equals("Trending") && !exploreTab.equals("Who to follow")) {
+            List<Post> discoveryPosts = postStore.getAllPosts().stream()
+                    .filter(post -> switch (exploreTab) {
+                        case "News" -> post.hasHashtag("#News")
+                                || post.getContent().toLowerCase().contains("news");
+                        case "Sports" -> post.hasHashtag("#Sports")
+                                || post.getContent().toLowerCase().contains("sport");
+                        case "Entertainment" -> post.hasHashtag("#Entertainment")
+                                || post.getContent().toLowerCase().contains("entertainment");
+                        default -> true;
+                    })
+                    .toList();
+            discoveryPosts.forEach(post ->
+                    timelineContainer.getChildren().add(createPostCard(post)));
+            if (discoveryPosts.isEmpty()) {
+                timelineContainer.getChildren().add(createLargeEmptyState(
+                        "Nothing here yet",
+                        "Posts from the shared server will appear here as people publish them."));
+            }
+            return;
+        }
+
         VBox discovery = new VBox();
         discovery.getStyleClass().add("discovery-content");
         switch (exploreTab) {
             case "Trending" -> {
                 discovery.getChildren().add(sectionHeading("Trends for you"));
-                addTrendItems(discovery, List.of("#JavaFX", "Desktop apps", "#Design", "Open source", "Technology"));
+                List<String> tags = postStore.getSharedTrends().stream()
+                        .map(SharedTrend::hashtag)
+                        .toList();
+                addTrendItems(discovery, tags);
+                if (tags.isEmpty()) {
+                    discovery.getChildren().add(createLargeEmptyState(
+                            "No trends yet",
+                            "Hashtags will appear here when people start using them."));
+                }
             }
             case "News" -> {
                 discovery.getChildren().add(sectionHeading("News"));
@@ -1022,7 +1136,10 @@ public class FeedController {
             }
             case "Who to follow" -> {
                 discovery.getChildren().add(sectionHeading("Suggested accounts"));
-                List<AccountProfile> accounts = AccountDirectory.all();
+                List<AccountProfile> accounts = postStore.getSharedProfileUsernames().stream()
+                        .filter(username -> !username.equalsIgnoreCase(UserSession.getInstance().getUsername()))
+                        .map(AccountDirectory::find)
+                        .toList();
                 for (AccountProfile account : accounts) {
                     HBox row = new HBox(12);
                     row.setAlignment(Pos.CENTER_LEFT);
@@ -1389,6 +1506,59 @@ public class FeedController {
             default -> "Choose an option from the More menu.";
         };
         timelineContainer.getChildren().add(createLargeEmptyState(moreSection, description));
+        User current = UserSession.getInstance().getCurrentUser();
+        if ("Settings and privacy".equals(moreSection) && current != null && current.isAdmin()) {
+            VBox admin = new VBox(8);
+            admin.setPadding(new Insets(18, 28, 28, 28));
+            Label heading = new Label("Administrator");
+            heading.setFont(AppFonts.fontFor(heading.getText(), 20, FontWeight.BOLD));
+            CheckBox fakeContent = new CheckBox("Enable automated demo accounts and posts");
+            Label status = new Label("Loading server setting…");
+            status.setTextFill(Color.web("#536471"));
+            fakeContent.setDisable(true);
+            admin.getChildren().addAll(heading, fakeContent, status);
+            timelineContainer.getChildren().add(admin);
+
+            Task<shared.models.SocialSettings> load = new Task<>() {
+                @Override protected shared.models.SocialSettings call() throws Exception {
+                    return sharedSocialClient.settings();
+                }
+            };
+            load.setOnSucceeded(event -> {
+                fakeContent.setSelected(load.getValue().fakeContentEnabled());
+                fakeContent.setDisable(false);
+                status.setText("This setting is stored on the server and affects every user.");
+            });
+            load.setOnFailed(event -> status.setText("Could not load the server setting."));
+            Thread loader = new Thread(load, "x-admin-settings");
+            loader.setDaemon(true);
+            loader.start();
+
+            fakeContent.setOnAction(event -> {
+                boolean requested = fakeContent.isSelected();
+                fakeContent.setDisable(true);
+                status.setText("Saving…");
+                Task<shared.models.SocialSettings> save = new Task<>() {
+                    @Override protected shared.models.SocialSettings call() throws Exception {
+                        return sharedSocialClient.updateFakeContent(requested);
+                    }
+                };
+                save.setOnSucceeded(done -> {
+                    fakeContent.setSelected(save.getValue().fakeContentEnabled());
+                    fakeContent.setDisable(false);
+                    status.setText("Saved for everyone.");
+                    refreshSharedSocialState();
+                });
+                save.setOnFailed(done -> {
+                    fakeContent.setSelected(!requested);
+                    fakeContent.setDisable(false);
+                    status.setText("The server rejected this change.");
+                });
+                Thread saver = new Thread(save, "x-admin-settings-save");
+                saver.setDaemon(true);
+                saver.start();
+            });
+        }
     }
 
     private void fillBookmarkResults(VBox results, String query) {
@@ -2630,7 +2800,13 @@ public class FeedController {
                 media.setFitHeight(320);
                 media.setPreserveRatio(true);
                 media.setSmooth(true);
-                media.setStyle("-fx-background-radius: 16; -fx-border-radius: 16;");
+                media.setStyle("-fx-background-radius: 16; -fx-border-radius: 16; -fx-cursor: hand;");
+                media.setAccessibleText("Open media from @" + post.getAuthorUsername());
+                media.setOnMouseClicked(event -> {
+                    event.consume();
+                    MediaViewer.show(media.getScene().getWindow(), post, postStore.getAllPosts());
+                });
+                markPostLink(media);
                 contentStack.getChildren().add(media);
             } else {
                 contentStack.getChildren().add(unavailableMediaLabel(post.getMediaUri()));
@@ -2846,7 +3022,7 @@ public class FeedController {
 
     @FXML
     private void handleLogout() {
-        UserSession.getInstance().clearSession();
+        UserSession.getInstance().logout();
         NavigationManager.switchScene("/views/Login.fxml");
     }
 }

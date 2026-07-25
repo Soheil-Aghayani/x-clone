@@ -116,6 +116,7 @@ try {
         -ArgumentList @(
             "--module-path", $ModulePath,
             "--add-modules", "javafx.controls,javafx.fxml",
+            "-Dxclone.server.url=http://127.0.0.1:8080",
             "-cp", $ClientCp,
             "client.launcher"
         ) `

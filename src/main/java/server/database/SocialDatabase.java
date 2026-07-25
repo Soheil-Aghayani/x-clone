@@ -6,8 +6,11 @@ import shared.models.SharedNotification;
 import shared.models.SharedPost;
 import shared.models.SharedProfile;
 import shared.models.SharedSocialState;
+import shared.models.SharedTrend;
+import shared.models.SocialSettings;
 import shared.models.User;
 
+import java.util.Base64;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -41,6 +44,10 @@ public final class SocialDatabase {
     private static final Pattern MENTION = Pattern.compile(
             "(?<![\\p{L}\\p{N}_])@([\\p{L}\\p{N}_]+)",
             Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Pattern HASHTAG = Pattern.compile(
+            "(?<![\\p{L}\\p{N}_])#([\\p{L}\\p{N}_]+)",
+            Pattern.UNICODE_CHARACTER_CLASS);
+    private static final int MAX_MEDIA_BYTES = 8 * 1024 * 1024;
 
     private final SqlBackend backend;
 
@@ -62,7 +69,7 @@ public final class SocialDatabase {
         }
         backend.initialize(SCHEMA);
         ensureSocialPostColumns();
-        initializeNpcWorld();
+        if (fakeContentEnabled()) initializeNpcWorld();
     }
 
     public static SocialDatabase getInstance() {
@@ -75,13 +82,141 @@ public final class SocialDatabase {
 
     public SharedSocialState state(String sessionToken) {
         Viewer viewer = requireViewer(sessionToken);
-        maintainNpcWorld();
+        if (fakeContentEnabled()) maintainNpcWorld();
         return new SharedSocialState(
                 profiles(),
                 posts(viewer.id()),
                 follows(),
                 notifications(viewer));
     }
+
+    public SharedSocialState feed(
+            String sessionToken, Long beforeId, int requestedLimit, boolean followingOnly) {
+        Viewer viewer = requireViewer(sessionToken);
+        if (fakeContentEnabled()) maintainNpcWorld();
+        int limit = Math.max(1, Math.min(100, requestedLimit));
+        return new SharedSocialState(
+                profiles(),
+                posts(viewer.id(), null, false, followingOnly, beforeId, limit),
+                follows(),
+                notifications(viewer));
+    }
+
+    public SharedSocialState search(
+            String sessionToken, String query, String tab, Long beforeId, int requestedLimit) {
+        Viewer viewer = requireViewer(sessionToken);
+        String normalized = query == null ? "" : query.trim();
+        int limit = Math.max(1, Math.min(100, requestedLimit));
+        boolean people = "people".equalsIgnoreCase(tab);
+        boolean media = "media".equalsIgnoreCase(tab);
+        return new SharedSocialState(
+                people || !normalized.isBlank() ? profiles(normalized, limit) : profiles(),
+                people ? List.of() : posts(viewer.id(), normalized, media, false, beforeId, limit),
+                follows(),
+                List.of());
+    }
+
+    public List<SharedTrend> trends(String sessionToken) {
+        requireViewer(sessionToken);
+        Result result = backend.execute("""
+                SELECT p.content
+                FROM social_posts p
+                WHERE (? = 1 OR NOT EXISTS (
+                    SELECT 1 FROM social_npc_accounts n WHERE n.user_id = p.author_id
+                ))
+                ORDER BY p.created_at DESC, p.id DESC
+                LIMIT 1000
+                """, fakeContentEnabled() ? 1 : 0);
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, String> display = new LinkedHashMap<>();
+        for (Map<String, String> row : result.rows()) {
+            Matcher matcher = HASHTAG.matcher(string(row, "content"));
+            Set<String> seen = new HashSet<>();
+            while (matcher.find()) {
+                String tag = matcher.group(1);
+                String key = normalize(tag);
+                if (seen.add(key)) {
+                    counts.merge(key, 1, Integer::sum);
+                    display.putIfAbsent(key, "#" + tag);
+                }
+            }
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                        .thenComparing(Map.Entry::getKey))
+                .limit(20)
+                .map(entry -> new SharedTrend(display.get(entry.getKey()), entry.getValue()))
+                .toList();
+    }
+
+    public SocialSettings settings(String sessionToken) {
+        Viewer viewer = requireViewer(sessionToken);
+        return new SocialSettings(fakeContentEnabled(), viewer.admin());
+    }
+
+    public SocialSettings updateFakeContent(String sessionToken, boolean enabled) {
+        Viewer viewer = requireViewer(sessionToken);
+        if (!viewer.admin()) throw new SecurityException("Administrator access is required.");
+        backend.execute("""
+                INSERT INTO app_settings (setting_key, setting_value, updated_at, updated_by)
+                VALUES ('fake_content_enabled', ?, ?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET
+                  setting_value = excluded.setting_value,
+                  updated_at = excluded.updated_at,
+                  updated_by = excluded.updated_by
+                """, enabled ? "true" : "false", Instant.now().toString(), viewer.id());
+        if (enabled) initializeNpcWorld();
+        return new SocialSettings(enabled, true);
+    }
+
+    public String uploadMedia(
+            String sessionToken, String mimeType, String originalName, String base64Data) {
+        Viewer viewer = requireViewer(sessionToken);
+        String mime = mimeType == null ? "" : mimeType.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("image/png", "image/jpeg", "image/gif").contains(mime)) {
+            throw new IllegalArgumentException("Only PNG, JPEG, and GIF media are supported.");
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(base64Data == null ? "" : base64Data);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("The uploaded media is not valid Base64.");
+        }
+        if (bytes.length == 0 || bytes.length > MAX_MEDIA_BYTES) {
+            throw new IllegalArgumentException("Media must be between 1 byte and 8 MB.");
+        }
+        if (!matchesImageSignature(bytes, mime)) {
+            throw new IllegalArgumentException("The uploaded file does not match its image type.");
+        }
+        Result inserted = backend.execute("""
+                INSERT INTO social_media
+                  (owner_id, mime_type, original_name, data_base64, byte_size, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                RETURNING id
+                """, viewer.id(), mime, limited(originalName, 180),
+                Base64.getEncoder().encodeToString(bytes), bytes.length, Instant.now().toString());
+        return "xclone-media:" + longValue(inserted.first(), "id");
+    }
+
+    public MediaAsset media(long id) {
+        Result result = backend.execute("""
+                SELECT mime_type, data_base64
+                FROM social_media
+                WHERE id = ?
+                LIMIT 1
+                """, id);
+        if (result.rows().isEmpty()) return null;
+        Map<String, String> row = result.first();
+        try {
+            return new MediaAsset(
+                    string(row, "mime_type"),
+                    Base64.getDecoder().decode(string(row, "data_base64")));
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    public record MediaAsset(String mimeType, byte[] bytes) {}
 
     public SharedSocialState createPost(
             String sessionToken,
@@ -251,8 +386,9 @@ public final class SocialDatabase {
             userCommands.add(new Command("""
                     INSERT OR IGNORE INTO app_users
                       (username, username_key, email, email_key, display_name, bio,
-                       created_at, professional, password_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+                       avatar_url, banner_url, created_at, location, professional, is_fake,
+                       status, password_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', ?)
                     """,
                     personality.username(),
                     normalize(personality.username()),
@@ -260,7 +396,10 @@ public final class SocialDatabase {
                     normalize(email),
                     personality.displayName(),
                     personality.bio(),
+                    personality.avatarUri(),
+                    personality.bannerUri(),
                     LocalDate.now().toString(),
+                    personality.location(),
                     disabledPassword));
         }
         backend.executeBatch(userCommands);
@@ -280,6 +419,18 @@ public final class SocialDatabase {
                     ? "" : "npc+" + personality.username() + "@xclone.invalid";
             if (personality != null && expectedEmail.equalsIgnoreCase(string(row, "email"))) {
                 accountCommands.add(new Command("""
+                        UPDATE app_users
+                        SET display_name = ?, bio = ?, avatar_url = ?, banner_url = ?,
+                            location = ?, professional = 1, is_fake = 1, status = 'active'
+                        WHERE id = ?
+                        """,
+                        personality.displayName(),
+                        personality.bio(),
+                        personality.avatarUri(),
+                        personality.bannerUri(),
+                        personality.location(),
+                        intValue(row, "id")));
+                accountCommands.add(new Command("""
                         INSERT OR IGNORE INTO social_npc_accounts (user_id, persona_key)
                         VALUES (?, ?)
                         """, intValue(row, "id"), personality.username()));
@@ -289,6 +440,7 @@ public final class SocialDatabase {
 
         List<NpcActor> actors = npcActors();
         if (actors.isEmpty()) return;
+        backfillNpcMedia(actors);
         Result count = backend.execute("""
                 SELECT COUNT(*) AS total
                 FROM social_posts p
@@ -308,6 +460,41 @@ public final class SocialDatabase {
         }
     }
 
+    /**
+     * Repairs NPC posts created by older builds, including stale local-file
+     * references. The choice is deterministic per post so restarts do not make
+     * media jump between images.
+     */
+    private void backfillNpcMedia(List<NpcActor> actors) {
+        Map<Integer, NpcContentBank.Personality> personalities = new LinkedHashMap<>();
+        actors.forEach(actor -> personalities.put(actor.id(), actor.personality()));
+        Result legacy = backend.execute("""
+                SELECT p.id, p.author_id, p.reply_to_id
+                FROM social_posts p
+                JOIN social_npc_accounts n ON n.user_id = p.author_id
+                WHERE p.media_uri IS NULL
+                   OR p.media_uri = ''
+                   OR p.media_uri NOT LIKE '/images/npc/media/%'
+                """);
+        List<Command> updates = new ArrayList<>();
+        for (Map<String, String> row : legacy.rows()) {
+            long postId = longValue(row, "id");
+            NpcContentBank.Personality personality =
+                    personalities.get(intValue(row, "author_id"));
+            if (personality == null) continue;
+            String media = row.get("reply_to_id") == null
+                    ? NpcContentBank.media(personality, new Random(postId * 104_729L + 17))
+                    : null;
+            updates.add(new Command(
+                    "UPDATE social_posts SET media_uri = ? WHERE id = ?",
+                    media, postId));
+        }
+        for (int start = 0; start < updates.size(); start += 50) {
+            backend.executeBatch(updates.subList(
+                    start, Math.min(start + 50, updates.size())));
+        }
+    }
+
     private void bootstrapNpcFeed(List<NpcActor> actors, int postCount) {
         Instant now = Instant.now();
         Random random = new Random(now.truncatedTo(ChronoUnit.DAYS).getEpochSecond());
@@ -323,7 +510,8 @@ public final class SocialDatabase {
             } while (!generatedContent.add(actor.username() + "\n" + content) && attempts < 12);
             Instant createdAt = now.minus((postCount - index) * 37L, ChronoUnit.MINUTES);
             postCommands.add(npcPostCommand(
-                    actor.id(), content, null, createdAt, 120 + random.nextInt(18_000)));
+                    actor.id(), content, NpcContentBank.media(actor.personality(), random),
+                    null, createdAt, 120 + random.nextInt(18_000)));
         }
         backend.executeBatch(postCommands);
 
@@ -337,6 +525,7 @@ public final class SocialDatabase {
             replyCommands.add(npcPostCommand(
                     actor.id(),
                     NpcContentBank.reply(actor.personality(), target.username(), random),
+                    null,
                     target.postId(),
                     now.minus(11L * (replyCount - index), ChronoUnit.MINUTES),
                     25 + random.nextInt(1_500)));
@@ -416,7 +605,8 @@ public final class SocialDatabase {
         int action = random.nextInt(100);
 
         if (action < 40) {
-            insertNpcPost(actor.id(), uniqueNpcPost(actor, random), null,
+            insertNpcPost(actor.id(), uniqueNpcPost(actor, random),
+                    NpcContentBank.media(actor.personality(), random), null,
                     Instant.now(), 20 + random.nextInt(900));
             return;
         }
@@ -432,6 +622,7 @@ public final class SocialDatabase {
             insertNpcPost(
                     actor.id(),
                     NpcContentBank.reply(actor.personality(), target.username(), random),
+                    null,
                     target.postId(),
                     Instant.now(),
                     5 + random.nextInt(180));
@@ -474,25 +665,27 @@ public final class SocialDatabase {
     private void insertNpcPost(
             int authorId,
             String content,
+            String mediaUri,
             Long replyToId,
             Instant createdAt,
             int initialViews) {
-        backend.execute(npcPostCommand(
-                authorId, content, replyToId, createdAt, initialViews).sql(),
-                authorId, content, replyToId, createdAt.toString(), initialViews);
+        Command command = npcPostCommand(
+                authorId, content, mediaUri, replyToId, createdAt, initialViews);
+        backend.execute(command.sql(), command.arguments());
     }
 
     private Command npcPostCommand(
             int authorId,
             String content,
+            String mediaUri,
             Long replyToId,
             Instant createdAt,
             int initialViews) {
         return new Command("""
                 INSERT INTO social_posts
-                  (author_id, content, reply_to_id, created_at, view_count)
-                VALUES (?, ?, ?, ?, ?)
-                """, authorId, content, replyToId, createdAt.toString(), initialViews);
+                  (author_id, content, media_uri, reply_to_id, created_at, view_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, authorId, content, mediaUri, replyToId, createdAt.toString(), initialViews);
     }
 
     private List<NpcActor> npcActors() {
@@ -589,13 +782,23 @@ public final class SocialDatabase {
     }
 
     private List<SharedProfile> profiles() {
+        return profiles("", 1000);
+    }
+
+    private List<SharedProfile> profiles(String query, int requestedLimit) {
+        String pattern = "%" + (query == null ? "" : query.trim().toLowerCase(Locale.ROOT)) + "%";
         Result result = backend.execute("""
                 SELECT username, display_name, bio, avatar_url, banner_url, created_at,
                        location, website, birth_date, professional
-                FROM app_users
+                FROM app_users u
+                WHERE u.status = 'active'
+                  AND (? = 1 OR u.is_fake = 0)
+                  AND (? = '%%' OR lower(u.username) LIKE ? OR lower(u.display_name) LIKE ?
+                       OR lower(COALESCE(u.bio, '')) LIKE ?)
                 ORDER BY id DESC
-                LIMIT 1000
-                """);
+                LIMIT ?
+                """, fakeContentEnabled() ? 1 : 0, pattern, pattern, pattern, pattern,
+                Math.max(1, Math.min(1000, requestedLimit)));
         return result.rows().stream().map(row -> new SharedProfile(
                 string(row, "username"),
                 string(row, "display_name"),
@@ -610,6 +813,18 @@ public final class SocialDatabase {
     }
 
     private List<SharedPost> posts(int viewerId) {
+        return posts(viewerId, null, false, false, null, 500);
+    }
+
+    private List<SharedPost> posts(
+            int viewerId,
+            String query,
+            boolean mediaOnly,
+            boolean followingOnly,
+            Long beforeId,
+            int requestedLimit) {
+        String normalizedQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        String pattern = "%" + normalizedQuery + "%";
         Result result = backend.execute("""
                 SELECT p.id, p.author_id, p.content, p.media_uri, p.reply_to_id,
                        p.quoted_post_id, p.created_at, p.view_count, u.username, u.display_name,
@@ -628,9 +843,25 @@ public final class SocialDatabase {
                        ) THEN 1 ELSE 0 END AS bookmarked_by_viewer
                 FROM social_posts p
                 JOIN app_users u ON u.id = p.author_id
+                WHERE u.status = 'active'
+                  AND (? = 1 OR u.is_fake = 0)
+                  AND (? IS NULL OR p.id < ?)
+                  AND (? = 0 OR p.media_uri IS NOT NULL)
+                  AND (? = 0 OR p.author_id = ? OR EXISTS (
+                    SELECT 1 FROM social_follows sf
+                    WHERE sf.follower_id = ? AND sf.followed_id = p.author_id
+                  ))
+                  AND (? = '%%' OR lower(p.content) LIKE ?
+                       OR lower(u.username) LIKE ? OR lower(u.display_name) LIKE ?)
                 ORDER BY p.created_at DESC, p.id DESC
-                LIMIT 500
-                """, viewerId, viewerId, viewerId);
+                LIMIT ?
+                """, viewerId, viewerId, viewerId,
+                fakeContentEnabled() ? 1 : 0,
+                beforeId, beforeId,
+                mediaOnly ? 1 : 0,
+                followingOnly ? 1 : 0, viewerId, viewerId,
+                pattern, pattern, pattern, pattern,
+                Math.max(1, Math.min(500, requestedLimit)));
         return result.rows().stream().map(row -> new SharedPost(
                 longValue(row, "id"),
                 string(row, "display_name"),
@@ -656,7 +887,9 @@ public final class SocialDatabase {
                 FROM social_follows f
                 JOIN app_users follower ON follower.id = f.follower_id
                 JOIN app_users followed ON followed.id = f.followed_id
-                """);
+                WHERE follower.status = 'active' AND followed.status = 'active'
+                  AND (? = 1 OR (follower.is_fake = 0 AND followed.is_fake = 0))
+                """, fakeContentEnabled() ? 1 : 0);
         return result.rows().stream().map(row -> new SharedFollow(
                 string(row, "follower_username"),
                 string(row, "followed_username"))).toList();
@@ -690,10 +923,10 @@ public final class SocialDatabase {
     private Viewer requireViewer(String token) {
         if (token == null || token.isBlank()) throw new SecurityException("Sign in is required.");
         Result result = backend.execute("""
-                SELECT u.id, u.username, u.display_name, s.expires_at
+                SELECT u.id, u.username, u.display_name, u.role, u.status, s.expires_at
                 FROM app_sessions s
                 JOIN app_users u ON u.id = s.user_id
-                WHERE s.token = ?
+                WHERE s.token = ? AND u.status = 'active'
                 LIMIT 1
                 """, token.trim());
         if (result.rows().isEmpty()) throw new SecurityException("Your session is invalid.");
@@ -705,7 +938,8 @@ public final class SocialDatabase {
         return new Viewer(
                 intValue(row, "id"),
                 string(row, "username"),
-                string(row, "display_name"));
+                string(row, "display_name"),
+                "admin".equalsIgnoreCase(string(row, "role")));
     }
 
     private void validateReferencedPost(Long postId) {
@@ -763,13 +997,47 @@ public final class SocialDatabase {
     private static String publicMediaUri(String uri) {
         if (uri == null || uri.isBlank()) return null;
         String value = uri.trim();
-        return value.startsWith("https://") ? value : null;
+        return value.startsWith("https://")
+                || value.startsWith("xclone-media:")
+                || value.startsWith("/images/npc/media/")
+                ? value : null;
     }
 
     private static String publicOrLocalProfileUri(String uri) {
         if (uri == null || uri.isBlank()) return null;
         String value = uri.trim();
-        return value.startsWith("https://") ? value : null;
+        return value.startsWith("https://")
+                || value.startsWith("xclone-media:")
+                || value.startsWith("/images/npc/")
+                ? value : null;
+    }
+
+    private boolean fakeContentEnabled() {
+        Result result = backend.execute("""
+                SELECT setting_value
+                FROM app_settings
+                WHERE setting_key = 'fake_content_enabled'
+                LIMIT 1
+                """);
+        return !result.rows().isEmpty()
+                && "true".equalsIgnoreCase(string(result.first(), "setting_value"));
+    }
+
+    private static boolean matchesImageSignature(byte[] bytes, String mime) {
+        if ("image/png".equals(mime)) {
+            return bytes.length >= 8
+                    && (bytes[0] & 0xff) == 0x89
+                    && bytes[1] == 0x50 && bytes[2] == 0x4e && bytes[3] == 0x47;
+        }
+        if ("image/jpeg".equals(mime)) {
+            return bytes.length >= 3
+                    && (bytes[0] & 0xff) == 0xff && (bytes[1] & 0xff) == 0xd8
+                    && (bytes[2] & 0xff) == 0xff;
+        }
+        return bytes.length >= 6
+                && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F'
+                && bytes[3] == '8' && (bytes[4] == '7' || bytes[4] == '9')
+                && bytes[5] == 'a';
     }
 
     private static String limited(String value, int limit) {
@@ -815,7 +1083,7 @@ public final class SocialDatabase {
 
     public enum Interaction { LIKE, REPOST, BOOKMARK }
 
-    private record Viewer(int id, String username, String displayName) {}
+    private record Viewer(int id, String username, String displayName, boolean admin) {}
     private record NpcActor(
             int id,
             String username,
@@ -971,6 +1239,25 @@ public final class SocialDatabase {
 
     private static final List<String> SCHEMA = List.of(
             """
+            CREATE TABLE IF NOT EXISTS app_settings (
+              setting_key TEXT PRIMARY KEY,
+              setting_value TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              updated_by INTEGER REFERENCES app_users(id) ON DELETE SET NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS social_media (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              owner_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+              mime_type TEXT NOT NULL,
+              original_name TEXT,
+              data_base64 TEXT NOT NULL,
+              byte_size INTEGER NOT NULL,
+              created_at TEXT NOT NULL
+            )
+            """,
+            """
             CREATE TABLE IF NOT EXISTS social_posts (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               author_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
@@ -1041,6 +1328,7 @@ public final class SocialDatabase {
             """,
             "CREATE INDEX IF NOT EXISTS social_posts_created_idx ON social_posts(created_at DESC)",
             "CREATE INDEX IF NOT EXISTS social_posts_author_idx ON social_posts(author_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS social_media_owner_idx ON social_media(owner_id, created_at DESC)",
             "CREATE INDEX IF NOT EXISTS social_notifications_recipient_idx ON social_notifications(recipient_id, created_at DESC)"
     );
 }
