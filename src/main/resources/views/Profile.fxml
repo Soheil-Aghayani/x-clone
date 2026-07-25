@@ -58,8 +58,15 @@
                     <StackPane minHeight="264.0" prefHeight="264.0" maxHeight="264.0">
                         <Region fx:id="profileBannerFallback" prefHeight="200.0" maxHeight="200.0" StackPane.alignment="TOP_CENTER" styleClass="profile-banner" />
                         <ImageView fx:id="profileBannerImage" fitWidth="600.0" fitHeight="200.0" preserveRatio="false" visible="false" managed="false" StackPane.alignment="TOP_CENTER" />
-                        <Circle fx:id="profileAvatarCircle" radius="66.0" translateX="16.0" translateY="1.0" StackPane.alignment="BOTTOM_LEFT" styleClass="profile-avatar" />
-                        <Label fx:id="profileAvatarLabel" minWidth="132.0" alignment="CENTER" text="U" translateX="16.0" translateY="1.0" StackPane.alignment="BOTTOM_LEFT" style="-fx-text-fill: white; -fx-font-size: 30; -fx-font-weight: bold;" />
+                        <StackPane minWidth="132.0" prefWidth="132.0" maxWidth="132.0"
+                                   minHeight="132.0" prefHeight="132.0" maxHeight="132.0"
+                                   translateX="16.0" translateY="1.0" StackPane.alignment="BOTTOM_LEFT">
+                            <Circle fx:id="profileAvatarCircle" radius="66.0" styleClass="profile-avatar" />
+                            <Label fx:id="profileAvatarLabel" minWidth="132.0" prefWidth="132.0" maxWidth="132.0"
+                                   minHeight="132.0" prefHeight="132.0" maxHeight="132.0"
+                                   alignment="CENTER" text="U" mouseTransparent="true"
+                                   style="-fx-text-fill: white; -fx-font-size: 30; -fx-font-weight: bold;" />
+                        </StackPane>
                         <HBox fx:id="profileActionBar" alignment="CENTER_RIGHT" minHeight="48.0" prefHeight="48.0" maxHeight="48.0"
                               spacing="8.0" translateX="-16.0" StackPane.alignment="BOTTOM_RIGHT">
                             <Button fx:id="profileMessageButton" managed="false" visible="false" onAction="#handleGoToChat" styleClass="profile-round-action" />
@@ -103,13 +110,7 @@
 
         <VBox fx:id="profileSuggestionsWidget" spacing="14.0" styleClass="widget-card" />
 
-        <VBox spacing="15.0" styleClass="widget-card">
-            <Label text="What's happening" styleClass="widget-title" />
-            <VBox><Label text="Technology · Trending" styleClass="secondary-text" /><Label text="#JavaFX" styleClass="widget-name" /><Label text="12.8K posts" styleClass="secondary-text" /></VBox>
-            <VBox><Label text="Trending" styleClass="secondary-text" /><Label text="#Design" styleClass="widget-name" /><Label text="8,420 posts" styleClass="secondary-text" /></VBox>
-            <VBox><Label text="Software · Trending" styleClass="secondary-text" /><Label text="Desktop apps" styleClass="widget-name" /><Label text="4,218 posts" styleClass="secondary-text" /></VBox>
-            <Label text="Show more" styleClass="show-more" />
-        </VBox>
+        <VBox fx:id="profileTrendsWidget" spacing="15.0" styleClass="widget-card" />
     </VBox>
             </HBox>
         </content>

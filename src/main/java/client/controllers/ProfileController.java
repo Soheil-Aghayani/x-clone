@@ -79,6 +79,7 @@ public class ProfileController {
     @FXML private Label parodyMetaLabel;
     @FXML private VBox userTweetsContainer;
     @FXML private VBox profileSuggestionsWidget;
+    @FXML private VBox profileTrendsWidget;
     @FXML private TextField profileSearchField;
     @FXML private ImageView profileBannerImage;
     @FXML private Region profileBannerFallback;
@@ -112,6 +113,7 @@ public class ProfileController {
                 && UserSession.getInstance().getUsername().equalsIgnoreCase(viewedProfile.username());
         setupIcons();
         populateProfileSuggestions();
+        populateProfileTrends();
         refreshProfileData();
         linkMetaLabel.setOnMouseClicked(event -> {
             String url = linkMetaLabel.getText();
@@ -707,6 +709,42 @@ public class ProfileController {
             });
         }
         profileSuggestionsWidget.getChildren().add(more);
+    }
+
+    private void populateProfileTrends() {
+        profileTrendsWidget.getChildren().clear();
+        var trends = postStore.getSharedTrends().stream().limit(3).toList();
+        boolean hasTrends = !trends.isEmpty();
+        profileTrendsWidget.setManaged(hasTrends);
+        profileTrendsWidget.setVisible(hasTrends);
+        if (!hasTrends) return;
+
+        Label title = new Label("What's happening");
+        title.getStyleClass().add("widget-title");
+        profileTrendsWidget.getChildren().add(title);
+
+        trends.forEach(trend -> {
+            VBox item = new VBox(2);
+            item.setStyle("-fx-cursor: hand;");
+            Label category = new Label("Trending");
+            category.getStyleClass().add("secondary-text");
+            Label hashtag = new Label(trend.hashtag());
+            hashtag.getStyleClass().add("widget-name");
+            Label count = new Label(trend.postCount() + (trend.postCount() == 1 ? " post" : " posts"));
+            count.getStyleClass().add("secondary-text");
+            item.getChildren().addAll(category, hashtag, count);
+            item.setOnMouseClicked(event -> {
+                postStore.requestHashtag(trend.hashtag());
+                postStore.requestView("explore");
+                NavigationManager.switchScene("/views/Feed.fxml");
+            });
+            profileTrendsWidget.getChildren().add(item);
+        });
+
+        Label more = new Label("Show more");
+        more.getStyleClass().add("show-more");
+        more.setOnMouseClicked(event -> handleGoToExplore());
+        profileTrendsWidget.getChildren().add(more);
     }
 
     @FXML private void handleGoToHome() { goToView("home"); }

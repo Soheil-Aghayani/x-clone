@@ -16,6 +16,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -125,6 +126,21 @@ class ProfileIdentityNavigationTest {
             Label viewedHandle = (Label) stage.getScene().getRoot().lookup("#usernameLabel");
             assertNotNull(viewedHandle);
             assertEquals(expectedHandle, viewedHandle.getText());
+
+            Label avatarInitial = (Label) stage.getScene().getRoot().lookup("#profileAvatarLabel");
+            Circle avatarCircle = (Circle) stage.getScene().getRoot().lookup("#profileAvatarCircle");
+            assertNotNull(avatarInitial);
+            assertNotNull(avatarCircle);
+            assertEquals(
+                    avatarCircle.localToScene(avatarCircle.getBoundsInLocal()).getCenterX(),
+                    avatarInitial.localToScene(avatarInitial.getBoundsInLocal()).getCenterX(),
+                    0.5
+            );
+            assertEquals(
+                    avatarCircle.localToScene(avatarCircle.getBoundsInLocal()).getCenterY(),
+                    avatarInitial.localToScene(avatarInitial.getBoundsInLocal()).getCenterY(),
+                    0.5
+            );
 
             stage.close();
             UserSession.getInstance().clearSession();
