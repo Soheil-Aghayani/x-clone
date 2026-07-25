@@ -40,6 +40,7 @@ public class server {
         AppDatabase.getInstance().verifyReady();
         SocialDatabase.getInstance().verifyReady();
         HttpServer httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+        httpServer.createContext("/", server::health);
         httpServer.createContext("/health", server::health);
         httpServer.createContext("/api/request", server::request);
         httpServer.createContext("/api/media/", server::media);

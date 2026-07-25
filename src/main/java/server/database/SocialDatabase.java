@@ -452,13 +452,19 @@ public final class SocialDatabase {
                   ))
                   AND (? = '%%' OR lower(p.content) LIKE ?
                        OR lower(u.username) LIKE ? OR lower(u.display_name) LIKE ?)
-                ORDER BY p.created_at DESC, p.id DESC
+                ORDER BY
+                  CASE WHEN p.author_id = ? OR EXISTS (
+                    SELECT 1 FROM social_follows sf
+                    WHERE sf.follower_id = ? AND sf.followed_id = p.author_id
+                  ) THEN 0 ELSE 1 END ASC,
+                  p.created_at DESC, p.id DESC
                 LIMIT ?
                 """, viewerId, viewerId, viewerId,
                 beforeId, beforeId,
                 mediaOnly ? 1 : 0,
                 followingOnly ? 1 : 0, viewerId, viewerId,
                 pattern, pattern, pattern, pattern,
+                viewerId, viewerId,
                 Math.max(1, Math.min(500, requestedLimit)));
         return result.rows().stream().map(row -> new SharedPost(
                 longValue(row, "id"),

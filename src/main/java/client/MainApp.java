@@ -39,6 +39,8 @@ public class MainApp extends Application {
 
         NavigationManager.switchScene("/views/Login.fxml");
         stage.show();
+        stage.toFront();
+        stage.requestFocus();
         if (UserSession.getInstance().hasSavedSession()) {
             Thread restore = new Thread(() -> {
                 if (UserSession.getInstance().restoreSavedSession()) {
