@@ -466,7 +466,7 @@ public final class SocialDatabase {
                 string(row, "username"),
                 string(row, "content"),
                 string(row, "created_at"),
-                string(row, "media_uri"),
+                nullableString(row, "media_uri"),
                 nullableLong(row, "reply_to_id"),
                 nullableLong(row, "quoted_post_id"),
                 intValue(row, "likes"),
@@ -644,6 +644,11 @@ public final class SocialDatabase {
     private static String string(Map<String, String> row, String name) {
         String value = row.get(name);
         return value == null ? "" : value;
+    }
+
+    private static String nullableString(Map<String, String> row, String name) {
+        String value = row.get(name);
+        return value == null || value.isBlank() ? null : value;
     }
 
     private static long longValue(Map<String, String> row, String name) {

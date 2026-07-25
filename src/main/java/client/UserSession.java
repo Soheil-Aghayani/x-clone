@@ -135,6 +135,11 @@ public class UserSession {
         }
     }
 
+    /** Persists profile fields changed after the session was initially created. */
+    public synchronized void persistCurrentUser() {
+        persist();
+    }
+
     private Path sessionFile() {
         String custom = System.getProperty("xclone.data.dir");
         Path directory = custom == null || custom.isBlank()

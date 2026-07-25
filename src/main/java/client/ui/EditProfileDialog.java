@@ -253,19 +253,12 @@ public final class EditProfileDialog {
     }
 
     private static void applyImage(ImageView view, String uri) {
-        if (uri == null || uri.isBlank()) return;
-        try { view.setImage(new Image(uri, true)); } catch (IllegalArgumentException ignored) { }
+        view.setImage(MediaLibrary.loadImage(uri));
     }
 
     private static void applyCircleImage(Circle circle, String uri) {
-        if (uri == null || uri.isBlank()) return;
-        try {
-            Image image = new Image(uri, 110, 110, true, true);
-            if (!image.isError() && image.getWidth() > 0 && image.getHeight() > 0) {
-                circle.setFill(new ImagePattern(image));
-            }
-        }
-        catch (IllegalArgumentException ignored) { }
+        Image image = MediaLibrary.loadImage(uri);
+        if (image != null) circle.setFill(new ImagePattern(image));
     }
 
     private static String value(String value) {

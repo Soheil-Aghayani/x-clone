@@ -3,6 +3,7 @@ package client.ui;
 import client.AppFonts;
 import client.AppIcons;
 import client.UserSession;
+import client.media.MediaLibrary;
 import client.profile.AccountDirectory;
 import client.profile.AccountProfile;
 import javafx.animation.PauseTransition;
@@ -206,15 +207,8 @@ public final class ProfileHoverCard {
             String key = source + "@" + Math.round(size);
             Image cached = AVATAR_CACHE.get(key);
             if (cached != null) return cached;
-            String uri;
-            if (source.startsWith("file:") || source.startsWith("http:") || source.startsWith("https:") || source.startsWith("data:")) {
-                uri = source;
-            } else {
-                var resource = ProfileHoverCard.class.getResource(source);
-                if (resource == null) return null;
-                uri = resource.toExternalForm();
-            }
-            Image loaded = new Image(uri, size, size, false, true);
+            Image loaded = MediaLibrary.loadImage(source);
+            if (loaded == null) return null;
             if (loaded.isError() || loaded.getWidth() <= 0 || loaded.getHeight() <= 0) return null;
             AVATAR_CACHE.put(key, loaded);
             return loaded;

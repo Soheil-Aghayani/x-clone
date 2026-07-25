@@ -47,7 +47,7 @@ public final class Post {
         this.authorUsername = authorUsername;
         this.content = content;
         this.createdAt = createdAt;
-        this.mediaUri = mediaUri;
+        this.mediaUri = mediaUri == null || mediaUri.isBlank() ? null : mediaUri.trim();
         this.replyToId = replyToId;
         this.quotedPostId = quotedPostId;
     }

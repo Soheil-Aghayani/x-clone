@@ -1023,9 +1023,23 @@
 .photo-overlay-button {
     -fx-background-color: rgba(15,20,25,0.72);
     -fx-background-radius: 999px;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-border-insets: 0;
+    -fx-border-radius: 999px;
     -fx-text-fill: #ffffff;
     -fx-font-size: 20px;
-    -fx-padding: 8px;
+    -fx-padding: 0;
+    -fx-min-width: 38px;
+    -fx-pref-width: 38px;
+    -fx-max-width: 38px;
+    -fx-min-height: 38px;
+    -fx-pref-height: 38px;
+    -fx-max-height: 38px;
+    -fx-alignment: center;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
     -fx-cursor: hand;
 }
 
@@ -1042,6 +1056,9 @@
 .edit-photo-button {
     -fx-background-color: #dbe3e7;
     -fx-background-radius: 18px;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
     -fx-text-fill: #0f1419;
     -fx-font-size: 14px;
     -fx-font-weight: bold;

@@ -286,20 +286,7 @@ public class ProfileController {
     }
 
     private Image loadProfileImage(String source, double width, double height) {
-        if (source == null || source.isBlank()) return null;
-        try {
-            Image image;
-            if (source.startsWith("file:") || source.startsWith("http:") || source.startsWith("https:") || source.startsWith("data:")) {
-                image = new Image(source, width, height, false, true);
-            } else {
-                var resource = getClass().getResource(source);
-                if (resource == null) return null;
-                image = new Image(resource.toExternalForm(), width, height, false, true);
-            }
-            return image.isError() || image.getWidth() <= 0 || image.getHeight() <= 0 ? null : image;
-        } catch (RuntimeException exception) {
-            return null;
-        }
+        return MediaLibrary.loadImage(source);
     }
 
     private void applyProfileFonts() {
@@ -653,6 +640,7 @@ public class ProfileController {
             user.setAvatarUrl(updated.avatarUri());
             user.setBannerUrl(updated.bannerUri());
             postStore.saveProfile(user);
+            UserSession.getInstance().persistCurrentUser();
             postStore.updateAuthorName(user.getUsername(), user.getDisplayName());
             ProfileHoverCard.clearAvatarCache();
             viewedProfile = AccountDirectory.current();

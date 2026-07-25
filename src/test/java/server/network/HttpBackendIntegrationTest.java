@@ -1,5 +1,6 @@
 package server.network;
 
+import client.media.MediaLibrary;
 import client.network.serverConnection;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -24,6 +25,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpBackendIntegrationTest {
@@ -102,6 +104,9 @@ class HttpBackendIntegrationTest {
         long postId = afterCreate.posts().stream()
                 .filter(post -> post.content().equals("A shared post from Alice"))
                 .findFirst().orElseThrow().id();
+        assertNull(afterCreate.posts().stream()
+                .filter(post -> post.id() == postId)
+                .findFirst().orElseThrow().mediaUri());
 
         JsonObject search = authenticated(bobToken);
         search.addProperty("query", "shared post from alice");
@@ -242,6 +247,10 @@ class HttpBackendIntegrationTest {
         assertEquals(StatusCode.OK, uploaded.getStatus(), uploaded.getMessage());
         String mediaUri = uploaded.getPayload().getAsJsonObject().get("mediaUri").getAsString();
         assertTrue(mediaUri.startsWith("xclone-media:"));
+        assertEquals(
+                System.getProperty("xclone.server.url") + "/api/media/"
+                        + mediaUri.substring("xclone-media:".length()),
+                MediaLibrary.resolveForDisplay(mediaUri));
 
         JsonObject create = authenticated(token);
         create.addProperty("content", "Persistent media");
@@ -249,6 +258,17 @@ class HttpBackendIntegrationTest {
         SharedSocialState state = state(connection.sendMessage(
                 request(RequestType.CREATE_POST, create)));
         assertTrue(state.posts().stream().anyMatch(post -> mediaUri.equals(post.mediaUri())));
+
+        JsonObject profile = new JsonObject();
+        profile.addProperty("displayName", "Media User");
+        profile.addProperty("avatarUrl", mediaUri);
+        JsonObject update = authenticated(token);
+        update.add("profile", profile);
+        SharedSocialState updated = state(connection.sendMessage(
+                request(RequestType.UPDATE_PROFILE, update)));
+        assertTrue(updated.profiles().stream().anyMatch(item ->
+                item.username().equalsIgnoreCase("media_" + suffix)
+                        && mediaUri.equals(item.avatarUrl())));
 
         long mediaId = Long.parseLong(mediaUri.substring("xclone-media:".length()));
         URI uri = URI.create(System.getProperty("xclone.server.url") + "/api/media/" + mediaId);
