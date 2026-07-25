@@ -30,8 +30,6 @@ public final class ApiService {
                 case GET_FEED -> feed(request);
                 case SEARCH_SOCIAL -> search(request);
                 case GET_TRENDS -> trends(request);
-                case GET_SETTINGS -> settings(request);
-                case UPDATE_SETTINGS -> updateSettings(request);
                 case UPLOAD_MEDIA -> uploadMedia(request);
                 case CREATE_POST, CREATE_TWEET -> createPost(request, null, null);
                 case CREATE_REPLY -> createPost(
@@ -67,10 +65,6 @@ public final class ApiService {
         if (displayName.isBlank() || username.isBlank() || email.isBlank() || password.length() < 6) {
             return Response.error(request.getRequestId(), StatusCode.BAD_REQUEST,
                     "Complete every field and use a password with at least 6 characters.");
-        }
-        if (username.toLowerCase(java.util.Locale.ROOT).startsWith("xclone_")) {
-            return Response.error(request.getRequestId(), StatusCode.BAD_REQUEST,
-                    "Usernames beginning with xclone_ are reserved for automated demo accounts.");
         }
         User user = AppDatabase.getInstance().register(displayName, username, email, password);
         if (user == null) {
@@ -140,19 +134,6 @@ public final class ApiService {
     private Response trends(Request request) {
         return Response.ok(request.getRequestId(), gson.toJsonTree(
                 SocialDatabase.getInstance().trends(string(payload(request), "token"))));
-    }
-
-    private Response settings(Request request) {
-        return Response.ok(request.getRequestId(), gson.toJsonTree(
-                SocialDatabase.getInstance().settings(string(payload(request), "token"))));
-    }
-
-    private Response updateSettings(Request request) {
-        JsonObject payload = payload(request);
-        return Response.ok(request.getRequestId(), gson.toJsonTree(
-                SocialDatabase.getInstance().updateFakeContent(
-                        string(payload, "token"),
-                        booleanValue(payload, "fakeContentEnabled"))));
     }
 
     private Response uploadMedia(Request request) {

@@ -2,6 +2,13 @@
 
 This document records the work completed from the original JavaFX prototype through the current X-style desktop application.
 
+## Clean public launch
+
+- Removed all generated demo identities, posts, automatic activity, fake profile assets, and simulated chat replies.
+- Added a one-time server migration that removes existing accounts and activity, then records a marker so later restarts preserve newly registered users.
+- JPEG and PNG uploads are now resized/compressed before Base64 database storage; animated GIF bytes remain unchanged.
+- Fixed text-only posts inheriting stale media, profile-hover flicker, profile-side suggestions, people-search routing, and oversized Explore result cards.
+
 ## 1. Original state
 
 The project started as a small JavaFX prototype with:

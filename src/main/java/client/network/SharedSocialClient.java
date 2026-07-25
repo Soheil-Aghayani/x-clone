@@ -6,7 +6,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import shared.models.SharedSocialState;
 import shared.models.SharedTrend;
-import shared.models.SocialSettings;
 import shared.models.User;
 import shared.protocol.Request;
 import shared.protocol.RequestType;
@@ -102,18 +101,6 @@ public final class SharedSocialClient {
         } catch (RuntimeException exception) {
             throw new IOException("The backend returned invalid trends.", exception);
         }
-    }
-
-    public SocialSettings settings() throws IOException {
-        Response response = sendRaw(RequestType.GET_SETTINGS, payload());
-        return gson.fromJson(response.getPayload(), SocialSettings.class);
-    }
-
-    public SocialSettings updateFakeContent(boolean enabled) throws IOException {
-        JsonObject payload = payload();
-        payload.addProperty("fakeContentEnabled", enabled);
-        Response response = sendRaw(RequestType.UPDATE_SETTINGS, payload);
-        return gson.fromJson(response.getPayload(), SocialSettings.class);
     }
 
     private SharedSocialState postAction(RequestType type, long postId) throws IOException {

@@ -1,6 +1,5 @@
 package client.chat;
 
-import client.profile.AccountDirectory;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -42,7 +41,20 @@ public final class ChatStore {
         Path directory = custom == null || custom.isBlank()
                 ? Path.of(System.getProperty("user.home"), ".x-clone") : Path.of(custom);
         file = directory.resolve("chat-state.json");
+        applyCleanStartMigration(directory);
         load();
+    }
+
+    private void applyCleanStartMigration(Path directory) {
+        Path marker = directory.resolve(".clean-start-remove-seed-accounts-v1");
+        if (Files.isRegularFile(marker)) return;
+        try {
+            Files.createDirectories(directory);
+            Files.deleteIfExists(file);
+            Files.writeString(marker, "complete");
+        } catch (IOException exception) {
+            System.err.println("Could not reset legacy local chat data: " + exception.getMessage());
+        }
     }
 
     public static ChatStore getInstance() { return INSTANCE; }
@@ -74,17 +86,6 @@ public final class ChatStore {
         conversation.participants.stream().filter(participant -> !participant.equals(normalize(sender)))
                 .forEach(conversation.unreadBy::add);
         save();
-    }
-
-    /**
-     * Adds a simulated response only for one of the app's explicit demo NPCs.
-     * Keeping this rule in the store prevents another UI from accidentally
-     * sending messages on behalf of a real account.
-     */
-    public synchronized boolean sendAutomaticReply(Conversation conversation, String sender, String text) {
-        if (!AccountDirectory.isNpc(sender)) return false;
-        send(conversation, sender, text);
-        return true;
     }
 
     public synchronized void markRead(Conversation conversation, String username) {
@@ -165,8 +166,7 @@ public final class ChatStore {
                 for (StoredMessage message : stored.messages) conversation.messages.add(new ChatMessage(
                         message.id, message.sender, message.text, Instant.parse(message.createdAt)));
                 removedImpersonatedReplies |= conversation.messages.removeIf(message ->
-                        LEGACY_AUTOMATIC_REPLIES.contains(message.text())
-                                && !AccountDirectory.isNpc(message.sender()));
+                        LEGACY_AUTOMATIC_REPLIES.contains(message.text()));
                 conversations.add(conversation);
             }
             if (removedImpersonatedReplies) save();

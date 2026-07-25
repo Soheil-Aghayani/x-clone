@@ -157,6 +157,7 @@ public final class PostStore {
         signalClock();
     }
 
+    /*
     private void seed() {
         Instant now = Instant.now();
         boolean changed = false;
@@ -249,6 +250,7 @@ public final class PostStore {
         return true;
     }
 
+    */
     public synchronized Post createPost(User author, String content) { return createPost(author, content, null); }
 
     public synchronized Post createPost(User author, String content, String mediaUri) {
@@ -780,17 +782,10 @@ public final class PostStore {
         if (state == null) return;
 
         posts.removeIf(Post::isDemo);
-        Map<Long, Post> existingSharedPosts = new HashMap<>();
-        posts.stream().filter(PostStore::isShared)
-                .forEach(post -> existingSharedPosts.put(post.getId(), post));
         posts.removeIf(PostStore::isShared);
         if (state.posts() != null) {
             for (SharedPost shared : state.posts()) {
-                long clientId = sharedClientId(shared.id());
-                Post post = existingSharedPosts.get(clientId);
-                if (post == null) post = sharedPost(shared);
-                else restoreSharedPostState(post, shared);
-                posts.add(post);
+                posts.add(sharedPost(shared));
             }
         }
         posts.sort(NEWEST_FIRST);

@@ -20,13 +20,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Base64;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpBackendIntegrationTest {
@@ -38,7 +35,6 @@ class HttpBackendIntegrationTest {
     @BeforeAll
     static void startBackend() throws Exception {
         System.setProperty("xclone.server.data.dir", temporaryData.toString());
-        System.setProperty("xclone.npc.interval.seconds", "1");
         System.setProperty("xclone.admin.username", "admin_integration");
         backend = server.start(0);
         System.setProperty("xclone.server.url",
@@ -50,7 +46,6 @@ class HttpBackendIntegrationTest {
         if (backend != null) backend.stop(0);
         System.clearProperty("xclone.server.url");
         System.clearProperty("xclone.server.data.dir");
-        System.clearProperty("xclone.npc.interval.seconds");
         System.clearProperty("xclone.admin.username");
     }
 
@@ -265,41 +260,6 @@ class HttpBackendIntegrationTest {
         assertTrue(java.util.Arrays.equals(png, response.body()));
     }
 
-    @Test
-    void onlyDatabaseAdminsCanEnableSharedFakeContent() throws Exception {
-        serverConnection connection = new serverConnection();
-        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        JsonObject user = register(connection, "Normal User", "normal_" + suffix);
-        JsonObject admin = register(connection, "Administrator", "admin_integration");
-        String userToken = user.getAsJsonObject("session").get("token").getAsString();
-        String adminToken = admin.getAsJsonObject("session").get("token").getAsString();
-        assertEquals("admin", admin.getAsJsonObject("user").get("role").getAsString());
-
-        JsonObject deniedUpdate = authenticated(userToken);
-        deniedUpdate.addProperty("fakeContentEnabled", true);
-        Response denied = connection.sendMessage(
-                request(RequestType.UPDATE_SETTINGS, deniedUpdate));
-        assertEquals(StatusCode.UNAUTHORIZED, denied.getStatus());
-
-        JsonObject enable = authenticated(adminToken);
-        enable.addProperty("fakeContentEnabled", true);
-        Response enabled = connection.sendMessage(request(RequestType.UPDATE_SETTINGS, enable));
-        assertEquals(StatusCode.OK, enabled.getStatus(), enabled.getMessage());
-        assertTrue(enabled.getPayload().getAsJsonObject().get("fakeContentEnabled").getAsBoolean());
-        SharedSocialState visible = state(connection.sendMessage(
-                request(RequestType.SYNC_SOCIAL, authenticated(userToken))));
-        assertEquals(10, visible.profiles().stream()
-                .filter(profile -> profile.username().startsWith("xclone_"))
-                .count());
-
-        JsonObject disable = authenticated(adminToken);
-        disable.addProperty("fakeContentEnabled", false);
-        Response disabled = connection.sendMessage(request(RequestType.UPDATE_SETTINGS, disable));
-        assertEquals(StatusCode.OK, disabled.getStatus());
-        assertFalse(disabled.getPayload().getAsJsonObject()
-                .get("fakeContentEnabled").getAsBoolean());
-    }
-
     private JsonObject register(serverConnection connection, String displayName, String username)
             throws Exception {
         JsonObject payload = new JsonObject();
@@ -327,24 +287,4 @@ class HttpBackendIntegrationTest {
         return new Request(UUID.randomUUID().toString(), type, payload);
     }
 
-    private static Set<Long> npcPostIds(SharedSocialState state) {
-        return state.posts().stream()
-                .filter(post -> post.authorUsername().startsWith("xclone_"))
-                .map(post -> post.id())
-                .collect(Collectors.toSet());
-    }
-
-    private static long npcActivityScore(SharedSocialState state) {
-        long posts = state.posts().stream()
-                .filter(post -> post.authorUsername().startsWith("xclone_"))
-                .count();
-        long engagement = state.posts().stream()
-                .filter(post -> post.authorUsername().startsWith("xclone_"))
-                .mapToLong(post -> post.likes() + post.replies() + post.reposts() + post.views())
-                .sum();
-        long follows = state.follows().stream()
-                .filter(follow -> follow.followerUsername().startsWith("xclone_"))
-                .count();
-        return posts * 1_000_000L + follows * 10_000L + engagement;
-    }
 }

@@ -1,13 +1,11 @@
 package server.database;
 
-import at.favre.lib.crypto.bcrypt.BCrypt;
 import shared.models.SharedFollow;
 import shared.models.SharedNotification;
 import shared.models.SharedPost;
 import shared.models.SharedProfile;
 import shared.models.SharedSocialState;
 import shared.models.SharedTrend;
-import shared.models.SocialSettings;
 import shared.models.User;
 
 import java.util.Base64;
@@ -21,16 +19,13 @@ import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,8 +34,7 @@ import java.util.regex.Pattern;
  * hosted Turso backend.
  */
 public final class SocialDatabase {
-    private static final long DEFAULT_NPC_INTERVAL_SECONDS = 15 * 60;
-    private static final int NPC_BOOTSTRAP_POSTS = 24;
+    private static final String CLEAN_START_MIGRATION = "clean_start_remove_seed_accounts_v1";
     private static final Pattern MENTION = Pattern.compile(
             "(?<![\\p{L}\\p{N}_])@([\\p{L}\\p{N}_]+)",
             Pattern.UNICODE_CHARACTER_CLASS);
@@ -69,11 +63,15 @@ public final class SocialDatabase {
         }
         backend.initialize(SCHEMA);
         ensureSocialPostColumns();
-        if (fakeContentEnabled()) initializeNpcWorld();
+        applyCleanStartMigration();
     }
 
     public static SocialDatabase getInstance() {
         return Holder.INSTANCE;
+    }
+
+    public void verifyReady() {
+        backend.execute("SELECT 1 AS ready");
     }
 
     private static final class Holder {
@@ -82,7 +80,6 @@ public final class SocialDatabase {
 
     public SharedSocialState state(String sessionToken) {
         Viewer viewer = requireViewer(sessionToken);
-        if (fakeContentEnabled()) maintainNpcWorld();
         return new SharedSocialState(
                 profiles(),
                 posts(viewer.id()),
@@ -93,7 +90,6 @@ public final class SocialDatabase {
     public SharedSocialState feed(
             String sessionToken, Long beforeId, int requestedLimit, boolean followingOnly) {
         Viewer viewer = requireViewer(sessionToken);
-        if (fakeContentEnabled()) maintainNpcWorld();
         int limit = Math.max(1, Math.min(100, requestedLimit));
         return new SharedSocialState(
                 profiles(),
@@ -121,12 +117,9 @@ public final class SocialDatabase {
         Result result = backend.execute("""
                 SELECT p.content
                 FROM social_posts p
-                WHERE (? = 1 OR NOT EXISTS (
-                    SELECT 1 FROM social_npc_accounts n WHERE n.user_id = p.author_id
-                ))
                 ORDER BY p.created_at DESC, p.id DESC
                 LIMIT 1000
-                """, fakeContentEnabled() ? 1 : 0);
+                """);
         Map<String, Integer> counts = new LinkedHashMap<>();
         Map<String, String> display = new LinkedHashMap<>();
         for (Map<String, String> row : result.rows()) {
@@ -149,26 +142,6 @@ public final class SocialDatabase {
                 .toList();
     }
 
-    public SocialSettings settings(String sessionToken) {
-        Viewer viewer = requireViewer(sessionToken);
-        return new SocialSettings(fakeContentEnabled(), viewer.admin());
-    }
-
-    public SocialSettings updateFakeContent(String sessionToken, boolean enabled) {
-        Viewer viewer = requireViewer(sessionToken);
-        if (!viewer.admin()) throw new SecurityException("Administrator access is required.");
-        backend.execute("""
-                INSERT INTO app_settings (setting_key, setting_value, updated_at, updated_by)
-                VALUES ('fake_content_enabled', ?, ?, ?)
-                ON CONFLICT(setting_key) DO UPDATE SET
-                  setting_value = excluded.setting_value,
-                  updated_at = excluded.updated_at,
-                  updated_by = excluded.updated_by
-                """, enabled ? "true" : "false", Instant.now().toString(), viewer.id());
-        if (enabled) initializeNpcWorld();
-        return new SocialSettings(enabled, true);
-    }
-
     public String uploadMedia(
             String sessionToken, String mimeType, String originalName, String base64Data) {
         Viewer viewer = requireViewer(sessionToken);
@@ -188,6 +161,9 @@ public final class SocialDatabase {
         if (!matchesImageSignature(bytes, mime)) {
             throw new IllegalArgumentException("The uploaded file does not match its image type.");
         }
+        MediaOptimizer.OptimizedMedia optimized = MediaOptimizer.optimize(bytes, mime);
+        bytes = optimized.bytes();
+        mime = optimized.mimeType();
         Result inserted = backend.execute("""
                 INSERT INTO social_media
                   (owner_id, mime_type, original_name, data_base64, byte_size, created_at)
@@ -373,412 +349,37 @@ public final class SocialDatabase {
     }
 
     /**
-     * Creates reserved, non-login NPC identities and an initial shared feed.
-     * These rows live in the same Turso database as real activity, so every
-     * desktop sees the same demo network.
+     * The owner requested a completely clean public launch. This migration runs
+     * exactly once per database, removes all old accounts and activity, and
+     * leaves a marker outside the user-owned rows so future restarts are safe.
      */
-    private synchronized void initializeNpcWorld() {
-        String disabledPassword = BCrypt.withDefaults().hashToString(
-                6, UUID.randomUUID().toString().toCharArray());
-        List<Command> userCommands = new ArrayList<>();
-        for (NpcContentBank.Personality personality : NpcContentBank.PERSONALITIES) {
-            String email = "npc+" + personality.username() + "@xclone.invalid";
-            userCommands.add(new Command("""
-                    INSERT OR IGNORE INTO app_users
-                      (username, username_key, email, email_key, display_name, bio,
-                       avatar_url, banner_url, created_at, location, professional, is_fake,
-                       status, password_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'active', ?)
-                    """,
-                    personality.username(),
-                    normalize(personality.username()),
-                    email,
-                    normalize(email),
-                    personality.displayName(),
-                    personality.bio(),
-                    personality.avatarUri(),
-                    personality.bannerUri(),
-                    LocalDate.now().toString(),
-                    personality.location(),
-                    disabledPassword));
-        }
-        backend.executeBatch(userCommands);
+    private void applyCleanStartMigration() {
+        Result marker = backend.execute("""
+                SELECT setting_value FROM app_settings
+                WHERE setting_key = ? LIMIT 1
+                """, CLEAN_START_MIGRATION);
+        if (!marker.rows().isEmpty()) return;
 
-        Result reservedUsers = backend.execute("""
-                SELECT id, username, email FROM app_users
-                WHERE username_key LIKE 'xclone_%'
-                """);
-        List<Command> accountCommands = new ArrayList<>();
-        for (Map<String, String> row : reservedUsers.rows()) {
-            String username = string(row, "username");
-            NpcContentBank.Personality personality = NpcContentBank.PERSONALITIES.stream()
-                    .filter(item -> item.username().equalsIgnoreCase(username))
-                    .findFirst()
-                    .orElse(null);
-            String expectedEmail = personality == null
-                    ? "" : "npc+" + personality.username() + "@xclone.invalid";
-            if (personality != null && expectedEmail.equalsIgnoreCase(string(row, "email"))) {
-                accountCommands.add(new Command("""
-                        UPDATE app_users
-                        SET display_name = ?, bio = ?, avatar_url = ?, banner_url = ?,
-                            location = ?, professional = 1, is_fake = 1, status = 'active'
-                        WHERE id = ?
-                        """,
-                        personality.displayName(),
-                        personality.bio(),
-                        personality.avatarUri(),
-                        personality.bannerUri(),
-                        personality.location(),
-                        intValue(row, "id")));
-                accountCommands.add(new Command("""
-                        INSERT OR IGNORE INTO social_npc_accounts (user_id, persona_key)
-                        VALUES (?, ?)
-                        """, intValue(row, "id"), personality.username()));
-            }
-        }
-        backend.executeBatch(accountCommands);
-
-        List<NpcActor> actors = npcActors();
-        if (actors.isEmpty()) return;
-        backfillNpcMedia(actors);
-        Result count = backend.execute("""
-                SELECT COUNT(*) AS total
-                FROM social_posts p
-                JOIN social_npc_accounts n ON n.user_id = p.author_id
-                WHERE p.reply_to_id IS NULL
-                """);
-        int existingTopLevelPosts = intValue(count.first(), "total");
-        if (existingTopLevelPosts < NPC_BOOTSTRAP_POSTS) {
-            bootstrapNpcFeed(actors, NPC_BOOTSTRAP_POSTS - existingTopLevelPosts);
-        }
-        Result lastBucket = backend.execute("""
-                SELECT state_value FROM social_npc_state
-                WHERE state_key = 'last_bucket' LIMIT 1
-                """);
-        if (lastBucket.rows().isEmpty()) {
-            setNpcState("last_bucket", Long.toString(currentNpcBucket()));
-        }
-    }
-
-    /**
-     * Repairs NPC posts created by older builds, including stale local-file
-     * references. The choice is deterministic per post so restarts do not make
-     * media jump between images.
-     */
-    private void backfillNpcMedia(List<NpcActor> actors) {
-        Map<Integer, NpcContentBank.Personality> personalities = new LinkedHashMap<>();
-        actors.forEach(actor -> personalities.put(actor.id(), actor.personality()));
-        Result legacy = backend.execute("""
-                SELECT p.id, p.author_id, p.reply_to_id
-                FROM social_posts p
-                JOIN social_npc_accounts n ON n.user_id = p.author_id
-                WHERE p.media_uri IS NULL
-                   OR p.media_uri = ''
-                   OR p.media_uri NOT LIKE '/images/npc/media/%'
-                """);
-        List<Command> updates = new ArrayList<>();
-        for (Map<String, String> row : legacy.rows()) {
-            long postId = longValue(row, "id");
-            NpcContentBank.Personality personality =
-                    personalities.get(intValue(row, "author_id"));
-            if (personality == null) continue;
-            String media = row.get("reply_to_id") == null
-                    ? NpcContentBank.media(personality, new Random(postId * 104_729L + 17))
-                    : null;
-            updates.add(new Command(
-                    "UPDATE social_posts SET media_uri = ? WHERE id = ?",
-                    media, postId));
-        }
-        for (int start = 0; start < updates.size(); start += 50) {
-            backend.executeBatch(updates.subList(
-                    start, Math.min(start + 50, updates.size())));
-        }
-    }
-
-    private void bootstrapNpcFeed(List<NpcActor> actors, int postCount) {
-        Instant now = Instant.now();
-        Random random = new Random(now.truncatedTo(ChronoUnit.DAYS).getEpochSecond());
-        List<Command> postCommands = new ArrayList<>();
-        Set<String> generatedContent = new HashSet<>();
-        for (int index = 0; index < postCount; index++) {
-            NpcActor actor = actors.get(index % actors.size());
-            String content;
-            int attempts = 0;
-            do {
-                content = NpcContentBank.post(actor.personality(), random);
-                attempts++;
-            } while (!generatedContent.add(actor.username() + "\n" + content) && attempts < 12);
-            Instant createdAt = now.minus((postCount - index) * 37L, ChronoUnit.MINUTES);
-            postCommands.add(npcPostCommand(
-                    actor.id(), content, NpcContentBank.media(actor.personality(), random),
-                    null, createdAt, 120 + random.nextInt(18_000)));
-        }
-        backend.executeBatch(postCommands);
-
-        List<NpcTarget> targets = npcTargets();
-        List<Command> replyCommands = new ArrayList<>();
-        int replyCount = Math.min(12, Math.max(3, postCount / 2));
-        for (int index = 0; index < replyCount && !targets.isEmpty(); index++) {
-            NpcActor actor = actors.get(random.nextInt(actors.size()));
-            NpcTarget target = differentTarget(targets, actor.id(), random);
-            if (target == null) continue;
-            replyCommands.add(npcPostCommand(
-                    actor.id(),
-                    NpcContentBank.reply(actor.personality(), target.username(), random),
-                    null,
-                    target.postId(),
-                    now.minus(11L * (replyCount - index), ChronoUnit.MINUTES),
-                    25 + random.nextInt(1_500)));
-        }
-        backend.executeBatch(replyCommands);
-
-        targets = npcTargets();
-        List<Command> engagementCommands = new ArrayList<>();
-        for (NpcActor actor : actors) {
-            for (int index = 0; index < 4 && !targets.isEmpty(); index++) {
-                NpcTarget target = differentTarget(targets, actor.id(), random);
-                if (target == null) continue;
-                engagementCommands.add(new Command(
-                        "INSERT OR IGNORE INTO social_likes (post_id, user_id) VALUES (?, ?)",
-                        target.postId(), actor.id()));
-                if (random.nextBoolean()) {
-                    engagementCommands.add(new Command(
-                            "INSERT OR IGNORE INTO social_reposts (post_id, user_id) VALUES (?, ?)",
-                            target.postId(), actor.id()));
-                }
-                if (random.nextInt(4) == 0) {
-                    engagementCommands.add(new Command(
-                            "INSERT OR IGNORE INTO social_bookmarks (post_id, user_id) VALUES (?, ?)",
-                            target.postId(), actor.id()));
-                }
-            }
-            NpcActor followed = differentActor(actors, actor.id(), random);
-            if (followed != null) {
-                engagementCommands.add(new Command("""
-                        INSERT OR IGNORE INTO social_follows (follower_id, followed_id)
-                        VALUES (?, ?)
-                        """, actor.id(), followed.id()));
-            }
-        }
-        backend.executeBatch(engagementCommands);
-    }
-
-    /**
-     * Advances at most a few missed activity slots when any authenticated
-     * client syncs. This avoids requiring a separate cron worker and remains
-     * useful when a free host has been asleep.
-     */
-    private synchronized void maintainNpcWorld() {
-        long currentBucket = currentNpcBucket();
-        long lastBucket = longNpcState("last_bucket", currentBucket);
-        if (currentBucket <= lastBucket) return;
-
-        int steps = (int) Math.min(6, currentBucket - lastBucket);
-        for (int step = steps - 1; step >= 0; step--) {
-            long bucket = currentBucket - step;
-            performNpcActivity(new Random(bucket * 7_919L + 31));
-        }
-        setNpcState("last_bucket", Long.toString(currentBucket));
-
-        String cutoff = Instant.now().minus(7, ChronoUnit.DAYS).toString();
-        backend.execute("""
-                DELETE FROM social_posts
-                WHERE id IN (
-                  SELECT p.id
-                  FROM social_posts p
-                  WHERE p.author_id IN (SELECT user_id FROM social_npc_accounts)
-                    AND p.created_at < ?
-                    AND NOT EXISTS (
-                      SELECT 1 FROM social_posts reply WHERE reply.reply_to_id = p.id
-                    )
-                    AND NOT EXISTS (
-                      SELECT 1 FROM social_posts quote WHERE quote.quoted_post_id = p.id
-                    )
-                )
-                """, cutoff);
-    }
-
-    private void performNpcActivity(Random random) {
-        List<NpcActor> actors = npcActors();
-        if (actors.size() < 2) return;
-        NpcActor actor = actors.get(random.nextInt(actors.size()));
-        int action = random.nextInt(100);
-
-        if (action < 40) {
-            insertNpcPost(actor.id(), uniqueNpcPost(actor, random),
-                    NpcContentBank.media(actor.personality(), random), null,
-                    Instant.now(), 20 + random.nextInt(900));
-            return;
-        }
-
-        List<NpcTarget> targets = npcTargets();
-        NpcTarget target = differentTarget(targets, actor.id(), random);
-        if (target == null) return;
-        backend.execute(
-                "UPDATE social_posts SET view_count = view_count + ? WHERE id = ?",
-                8 + random.nextInt(240), target.postId());
-
-        if (action < 66) {
-            insertNpcPost(
-                    actor.id(),
-                    NpcContentBank.reply(actor.personality(), target.username(), random),
-                    null,
-                    target.postId(),
-                    Instant.now(),
-                    5 + random.nextInt(180));
-        } else if (action < 79) {
-            backend.execute(
-                    "INSERT OR IGNORE INTO social_likes (post_id, user_id) VALUES (?, ?)",
-                    target.postId(), actor.id());
-        } else if (action < 89) {
-            backend.execute(
-                    "INSERT OR IGNORE INTO social_reposts (post_id, user_id) VALUES (?, ?)",
-                    target.postId(), actor.id());
-        } else if (action < 95) {
-            backend.execute(
-                    "INSERT OR IGNORE INTO social_bookmarks (post_id, user_id) VALUES (?, ?)",
-                    target.postId(), actor.id());
-        } else {
-            NpcActor followed = differentActor(actors, actor.id(), random);
-            if (followed != null) {
-                backend.execute("""
-                        INSERT OR IGNORE INTO social_follows (follower_id, followed_id)
-                        VALUES (?, ?)
-                        """, actor.id(), followed.id());
-            }
-        }
-    }
-
-    private String uniqueNpcPost(NpcActor actor, Random random) {
-        String content = NpcContentBank.post(actor.personality(), random);
-        for (int attempt = 0; attempt < 6; attempt++) {
-            Result duplicate = backend.execute("""
-                    SELECT 1 AS present FROM social_posts
-                    WHERE author_id = ? AND content = ? LIMIT 1
-                    """, actor.id(), content);
-            if (duplicate.rows().isEmpty()) return content;
-            content = NpcContentBank.post(actor.personality(), random);
-        }
-        return content;
-    }
-
-    private void insertNpcPost(
-            int authorId,
-            String content,
-            String mediaUri,
-            Long replyToId,
-            Instant createdAt,
-            int initialViews) {
-        Command command = npcPostCommand(
-                authorId, content, mediaUri, replyToId, createdAt, initialViews);
-        backend.execute(command.sql(), command.arguments());
-    }
-
-    private Command npcPostCommand(
-            int authorId,
-            String content,
-            String mediaUri,
-            Long replyToId,
-            Instant createdAt,
-            int initialViews) {
-        return new Command("""
-                INSERT INTO social_posts
-                  (author_id, content, media_uri, reply_to_id, created_at, view_count)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, authorId, content, mediaUri, replyToId, createdAt.toString(), initialViews);
-    }
-
-    private List<NpcActor> npcActors() {
-        Result result = backend.execute("""
-                SELECT u.id, u.username, n.persona_key
-                FROM social_npc_accounts n
-                JOIN app_users u ON u.id = n.user_id
-                ORDER BY u.id
-                """);
-        List<NpcActor> actors = new ArrayList<>();
-        for (Map<String, String> row : result.rows()) {
-            String personaKey = string(row, "persona_key");
-            NpcContentBank.Personality personality = NpcContentBank.PERSONALITIES.stream()
-                    .filter(item -> item.username().equalsIgnoreCase(personaKey))
-                    .findFirst()
-                    .orElse(null);
-            if (personality != null) {
-                actors.add(new NpcActor(
-                        intValue(row, "id"),
-                        string(row, "username"),
-                        personality));
-            }
-        }
-        return List.copyOf(actors);
-    }
-
-    private List<NpcTarget> npcTargets() {
-        Result result = backend.execute("""
-                SELECT p.id, p.author_id, u.username
-                FROM social_posts p
-                JOIN social_npc_accounts n ON n.user_id = p.author_id
-                JOIN app_users u ON u.id = p.author_id
-                ORDER BY p.created_at DESC, p.id DESC
-                LIMIT 300
-                """);
-        return result.rows().stream().map(row -> new NpcTarget(
-                longValue(row, "id"),
-                intValue(row, "author_id"),
-                string(row, "username"))).toList();
-    }
-
-    private NpcTarget differentTarget(List<NpcTarget> targets, int actorId, Random random) {
-        if (targets == null || targets.isEmpty()) return null;
-        for (int attempt = 0; attempt < 12; attempt++) {
-            NpcTarget target = targets.get(random.nextInt(targets.size()));
-            if (target.authorId() != actorId) return target;
-        }
-        return targets.stream().filter(target -> target.authorId() != actorId).findFirst().orElse(null);
-    }
-
-    private NpcActor differentActor(List<NpcActor> actors, int actorId, Random random) {
-        for (int attempt = 0; attempt < 12; attempt++) {
-            NpcActor actor = actors.get(random.nextInt(actors.size()));
-            if (actor.id() != actorId) return actor;
-        }
-        return actors.stream().filter(actor -> actor.id() != actorId).findFirst().orElse(null);
-    }
-
-    private long currentNpcBucket() {
-        return Instant.now().getEpochSecond() / npcIntervalSeconds();
-    }
-
-    private long npcIntervalSeconds() {
-        String property = System.getProperty("xclone.npc.interval.seconds");
-        String configured = property == null || property.isBlank()
-                ? System.getenv("XCLONE_NPC_INTERVAL_SECONDS")
-                : property;
-        if (configured == null || configured.isBlank()) return DEFAULT_NPC_INTERVAL_SECONDS;
-        try {
-            long minimum = property == null || property.isBlank() ? 60 : 1;
-            return Math.max(minimum, Long.parseLong(configured));
-        } catch (NumberFormatException ignored) {
-            return DEFAULT_NPC_INTERVAL_SECONDS;
-        }
-    }
-
-    private long longNpcState(String key, long fallback) {
-        Result result = backend.execute(
-                "SELECT state_value FROM social_npc_state WHERE state_key = ? LIMIT 1", key);
-        if (result.rows().isEmpty()) return fallback;
-        try {
-            return Long.parseLong(string(result.first(), "state_value"));
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
-    }
-
-    private void setNpcState(String key, String value) {
-        backend.execute("""
-                INSERT INTO social_npc_state (state_key, state_value)
-                VALUES (?, ?)
-                ON CONFLICT(state_key) DO UPDATE SET state_value = excluded.state_value
-                """, key, value);
+        backend.executeBatch(List.of(
+                new Command("DELETE FROM social_notifications"),
+                new Command("DELETE FROM social_bookmarks"),
+                new Command("DELETE FROM social_reposts"),
+                new Command("DELETE FROM social_likes"),
+                new Command("DELETE FROM social_follows"),
+                new Command("DELETE FROM social_posts"),
+                new Command("DELETE FROM social_media"),
+                new Command("DELETE FROM app_sessions"),
+                new Command("DELETE FROM app_users"),
+                new Command("DELETE FROM app_settings"),
+                new Command("""
+                        INSERT INTO app_settings
+                          (setting_key, setting_value, updated_at, updated_by)
+                        VALUES (?, 'complete', ?, NULL)
+                        """, CLEAN_START_MIGRATION, Instant.now().toString()),
+                new Command("DROP TABLE IF EXISTS social_npc_accounts"),
+                new Command("DROP TABLE IF EXISTS social_npc_state")
+        ));
+        System.out.println("Applied one-time clean-start database reset.");
     }
 
     private List<SharedProfile> profiles() {
@@ -792,12 +393,11 @@ public final class SocialDatabase {
                        location, website, birth_date, professional
                 FROM app_users u
                 WHERE u.status = 'active'
-                  AND (? = 1 OR u.is_fake = 0)
                   AND (? = '%%' OR lower(u.username) LIKE ? OR lower(u.display_name) LIKE ?
                        OR lower(COALESCE(u.bio, '')) LIKE ?)
                 ORDER BY id DESC
                 LIMIT ?
-                """, fakeContentEnabled() ? 1 : 0, pattern, pattern, pattern, pattern,
+                """, pattern, pattern, pattern, pattern,
                 Math.max(1, Math.min(1000, requestedLimit)));
         return result.rows().stream().map(row -> new SharedProfile(
                 string(row, "username"),
@@ -844,7 +444,6 @@ public final class SocialDatabase {
                 FROM social_posts p
                 JOIN app_users u ON u.id = p.author_id
                 WHERE u.status = 'active'
-                  AND (? = 1 OR u.is_fake = 0)
                   AND (? IS NULL OR p.id < ?)
                   AND (? = 0 OR p.media_uri IS NOT NULL)
                   AND (? = 0 OR p.author_id = ? OR EXISTS (
@@ -856,7 +455,6 @@ public final class SocialDatabase {
                 ORDER BY p.created_at DESC, p.id DESC
                 LIMIT ?
                 """, viewerId, viewerId, viewerId,
-                fakeContentEnabled() ? 1 : 0,
                 beforeId, beforeId,
                 mediaOnly ? 1 : 0,
                 followingOnly ? 1 : 0, viewerId, viewerId,
@@ -888,8 +486,7 @@ public final class SocialDatabase {
                 JOIN app_users follower ON follower.id = f.follower_id
                 JOIN app_users followed ON followed.id = f.followed_id
                 WHERE follower.status = 'active' AND followed.status = 'active'
-                  AND (? = 1 OR (follower.is_fake = 0 AND followed.is_fake = 0))
-                """, fakeContentEnabled() ? 1 : 0);
+                """);
         return result.rows().stream().map(row -> new SharedFollow(
                 string(row, "follower_username"),
                 string(row, "followed_username"))).toList();
@@ -999,7 +596,6 @@ public final class SocialDatabase {
         String value = uri.trim();
         return value.startsWith("https://")
                 || value.startsWith("xclone-media:")
-                || value.startsWith("/images/npc/media/")
                 ? value : null;
     }
 
@@ -1008,19 +604,7 @@ public final class SocialDatabase {
         String value = uri.trim();
         return value.startsWith("https://")
                 || value.startsWith("xclone-media:")
-                || value.startsWith("/images/npc/")
                 ? value : null;
-    }
-
-    private boolean fakeContentEnabled() {
-        Result result = backend.execute("""
-                SELECT setting_value
-                FROM app_settings
-                WHERE setting_key = 'fake_content_enabled'
-                LIMIT 1
-                """);
-        return !result.rows().isEmpty()
-                && "true".equalsIgnoreCase(string(result.first(), "setting_value"));
     }
 
     private static boolean matchesImageSignature(byte[] bytes, String mime) {
@@ -1084,11 +668,6 @@ public final class SocialDatabase {
     public enum Interaction { LIKE, REPOST, BOOKMARK }
 
     private record Viewer(int id, String username, String displayName, boolean admin) {}
-    private record NpcActor(
-            int id,
-            String username,
-            NpcContentBank.Personality personality) {}
-    private record NpcTarget(long postId, int authorId, String username) {}
 
     private record Result(List<Map<String, String>> rows, long affectedRows) {
         private Map<String, String> first() {
@@ -1300,18 +879,6 @@ public final class SocialDatabase {
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               PRIMARY KEY (follower_id, followed_id),
               CHECK (follower_id <> followed_id)
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS social_npc_accounts (
-              user_id INTEGER PRIMARY KEY REFERENCES app_users(id) ON DELETE CASCADE,
-              persona_key TEXT NOT NULL UNIQUE
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS social_npc_state (
-              state_key TEXT PRIMARY KEY,
-              state_value TEXT NOT NULL
             )
             """,
             """

@@ -63,7 +63,6 @@
                         <HBox fx:id="profileActionBar" alignment="CENTER_RIGHT" minHeight="48.0" prefHeight="48.0" maxHeight="48.0"
                               spacing="8.0" translateX="-16.0" StackPane.alignment="BOTTOM_RIGHT">
                             <Button fx:id="profileMessageButton" managed="false" visible="false" onAction="#handleGoToChat" styleClass="profile-round-action" />
-                            <Button fx:id="profileSubscribeButton" managed="false" visible="false" onAction="#handleSubscribe" styleClass="profile-round-action, profile-subscribe-action" />
                             <Button fx:id="editProfileButton" text="Edit profile" onAction="#handleEditProfile" styleClass="edit-profile-button" />
                         </HBox>
                     </StackPane>
@@ -102,20 +101,7 @@
     <VBox fx:id="rightSidebar" minWidth="380.0" prefWidth="380.0" maxWidth="410.0" spacing="14.0" HBox.hgrow="ALWAYS" styleClass="right-sidebar">
         <TextField fx:id="profileSearchField" promptText="Search" onAction="#handleSearch" styleClass="search-field" />
 
-        <VBox spacing="14.0" styleClass="widget-card">
-            <Label text="You might like" styleClass="widget-title" />
-            <HBox alignment="CENTER_LEFT" spacing="10.0">
-                <Circle fx:id="javaFxSuggestionAvatar" radius="20.0" />
-                <VBox HBox.hgrow="ALWAYS"><Label text="JavaFX" styleClass="widget-name" /><Label text=" @openjfx" styleClass="secondary-text" /></VBox>
-                <Button fx:id="followJavaFxButton" text="Follow" onAction="#handleFollowJavaFx" styleClass="follow-button" />
-            </HBox>
-            <HBox alignment="CENTER_LEFT" spacing="10.0">
-                <Circle fx:id="designSuggestionAvatar" radius="20.0" />
-                <VBox HBox.hgrow="ALWAYS"><Label text="Design Daily" styleClass="widget-name" /><Label text=" @designdaily" styleClass="secondary-text" /></VBox>
-                <Button fx:id="followDesignButton" text="Follow" onAction="#handleFollowDesign" styleClass="follow-button" />
-            </HBox>
-            <Label text="Show more" styleClass="show-more" />
-        </VBox>
+        <VBox fx:id="profileSuggestionsWidget" spacing="14.0" styleClass="widget-card" />
 
         <VBox spacing="15.0" styleClass="widget-card">
             <Label text="What's happening" styleClass="widget-title" />

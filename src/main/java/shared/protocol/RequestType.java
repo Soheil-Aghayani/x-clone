@@ -11,8 +11,6 @@ public enum RequestType {
     SEARCH_SOCIAL,
     GET_FEED,
     GET_TRENDS,
-    GET_SETTINGS,
-    UPDATE_SETTINGS,
     CREATE_TWEET,
     DELETE_TWEET,
     SYNC_SOCIAL,

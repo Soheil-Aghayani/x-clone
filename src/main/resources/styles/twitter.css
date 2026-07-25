@@ -1001,10 +1001,6 @@
     -fx-background-color: #eff3f4;
 }
 
-.profile-subscribe-action {
-    -fx-border-color: #c936d7;
-}
-
 .edit-profile-dialog {
     -fx-background-radius: 18px;
 }

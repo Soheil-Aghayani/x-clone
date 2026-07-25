@@ -23,6 +23,7 @@ public class server {
     public static void main(String[] args) {
         try {
             AppDatabase.getInstance().verifyReady();
+            SocialDatabase.getInstance().verifyReady();
             HttpServer httpServer = start(resolvePort());
             Runtime.getRuntime().addShutdownHook(
                     new Thread(() -> httpServer.stop(1), "x-clone-server-shutdown"));
@@ -37,6 +38,7 @@ public class server {
 
     public static HttpServer start(int port) throws IOException {
         AppDatabase.getInstance().verifyReady();
+        SocialDatabase.getInstance().verifyReady();
         HttpServer httpServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         httpServer.createContext("/health", server::health);
         httpServer.createContext("/api/request", server::request);

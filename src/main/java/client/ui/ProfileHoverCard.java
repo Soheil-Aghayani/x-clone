@@ -24,6 +24,7 @@ import javafx.stage.Popup;
 import javafx.util.Duration;
 
 import java.util.Map;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Attaches the delayed X-style account summary shown when hovering a name or handle. */
@@ -33,6 +34,11 @@ public final class ProfileHoverCard {
     private ProfileHoverCard() {}
 
     public static void attach(Node anchor, String username, Runnable openProfile) {
+        attachAnchors(List.of(anchor), username, openProfile);
+    }
+
+    private static void attachAnchors(
+            List<Node> anchors, String username, Runnable openProfile) {
         AccountProfile account = AccountDirectory.find(username);
         Popup popup = new Popup();
         popup.setAutoFix(true);
@@ -45,32 +51,40 @@ public final class ProfileHoverCard {
         popup.getContent().add(card);
 
         PauseTransition showDelay = new PauseTransition(Duration.millis(350));
-        PauseTransition hideDelay = new PauseTransition(Duration.millis(180));
+        PauseTransition hideDelay = new PauseTransition(Duration.millis(280));
+        Node[] activeAnchor = new Node[1];
         showDelay.setOnFinished(event -> {
             if (popup.isShowing()) return;
+            Node anchor = activeAnchor[0];
+            if (anchor == null) return;
             if (anchor.getScene() == null || anchor.getScene().getWindow() == null) return;
             Bounds bounds = anchor.localToScreen(anchor.getBoundsInLocal());
+            if (bounds == null) return;
             popup.show(anchor, bounds.getMinX(), bounds.getMaxY() + 2);
         });
         hideDelay.setOnFinished(event -> popup.hide());
-        anchor.setOnMouseEntered(event -> {
-            hideDelay.stop();
-            if (!popup.isShowing()) {
-                showDelay.playFromStart();
+        for (Node anchor : anchors) {
+            if (anchor == null) continue;
+            anchor.setOnMouseEntered(event -> {
+                activeAnchor[0] = anchor;
+                hideDelay.stop();
+                if (!popup.isShowing()) showDelay.playFromStart();
+            });
+            anchor.setOnMouseExited(event -> {
+                showDelay.stop();
+                hideDelay.playFromStart();
+            });
+            anchor.setOnMouseClicked(event -> {
+                navigate.run();
+                event.consume();
+            });
+            if (!anchor.getStyle().contains("-fx-cursor: hand")) {
+                anchor.setStyle(anchor.getStyle() + "-fx-cursor: hand;");
             }
-        });
-        anchor.setOnMouseExited(event -> {
-            showDelay.stop();
-            hideDelay.playFromStart();
-        });
+            anchor.setAccessibleText("Open @" + account.username() + " profile");
+        }
         card.setOnMouseEntered(event -> hideDelay.stop());
         card.setOnMouseExited(event -> hideDelay.playFromStart());
-        anchor.setOnMouseClicked(event -> {
-            navigate.run();
-            event.consume();
-        });
-        anchor.setStyle(anchor.getStyle() + "-fx-cursor: hand;");
-        anchor.setAccessibleText("Open @" + account.username() + " profile");
     }
 
     /**
@@ -84,9 +98,12 @@ public final class ProfileHoverCard {
             String username,
             Runnable openProfile
     ) {
-        if (avatar != null) attach(avatar, username, openProfile);
-        if (displayName != null) attach(displayName, username, openProfile);
-        if (handle != null) attach(handle, username, openProfile);
+        attachAnchors(
+                java.util.stream.Stream.of(avatar, displayName, handle)
+                        .filter(java.util.Objects::nonNull)
+                        .toList(),
+                username,
+                openProfile);
     }
 
     static VBox buildCard(AccountProfile account, Runnable openProfile) {

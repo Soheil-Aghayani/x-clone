@@ -78,12 +78,11 @@ public class ProfileController {
     @FXML private Label calendarMetaLabel;
     @FXML private Label parodyMetaLabel;
     @FXML private VBox userTweetsContainer;
+    @FXML private VBox profileSuggestionsWidget;
     @FXML private TextField profileSearchField;
     @FXML private ImageView profileBannerImage;
     @FXML private Region profileBannerFallback;
     @FXML private Circle profileAvatarCircle;
-    @FXML private Circle javaFxSuggestionAvatar;
-    @FXML private Circle designSuggestionAvatar;
 
     @FXML private Button homeNavButton;
     @FXML private Button exploreNavButton;
@@ -96,11 +95,8 @@ public class ProfileController {
     @FXML private Button sidebarPostButton;
     @FXML private Button editProfileButton;
     @FXML private Button profileMessageButton;
-    @FXML private Button profileSubscribeButton;
     @FXML private Button backButton;
     @FXML private Button headerSearchButton;
-    @FXML private Button followJavaFxButton;
-    @FXML private Button followDesignButton;
     @FXML private Button postsTabButton;
     @FXML private Button repliesTabButton;
     @FXML private Button highlightsTabButton;
@@ -115,9 +111,7 @@ public class ProfileController {
         ownProfile = UserSession.getInstance().getUsername() != null
                 && UserSession.getInstance().getUsername().equalsIgnoreCase(viewedProfile.username());
         setupIcons();
-        setSuggestionAvatar(javaFxSuggestionAvatar, "openjfx");
-        setSuggestionAvatar(designSuggestionAvatar, "designdaily");
-        refreshFollowButtons();
+        populateProfileSuggestions();
         refreshProfileData();
         linkMetaLabel.setOnMouseClicked(event -> {
             String url = linkMetaLabel.getText();
@@ -142,7 +136,6 @@ public class ProfileController {
         backButton.setText("←");
         headerSearchButton.setGraphic(AppIcons.icon("search-icon.svg", 20, "#0f1419"));
         profileMessageButton.setGraphic(AppIcons.icon("messages-plus-icon.svg", 19, "#0f1419"));
-        profileSubscribeButton.setGraphic(AppIcons.icon("superfollows-filled-icon.svg", 19, "#c936d7"));
         locationMetaLabel.setGraphic(AppIcons.icon("location-pin-icon.svg", 16, "#536471"));
         linkMetaLabel.setGraphic(AppIcons.icon("link-icon.svg", 16, "#1d9bf0"));
         calendarMetaLabel.setGraphic(AppIcons.icon("calendar-icon.svg", 16, "#536471"));
@@ -152,14 +145,6 @@ public class ProfileController {
         button.setGraphic(AppIcons.icon(filename, 24, "#0f1419"));
         button.setContentDisplay(ContentDisplay.LEFT);
         button.setGraphicTextGap(18);
-    }
-
-    private void setSuggestionAvatar(Circle circle, String username) {
-        AccountProfile profile = AccountDirectory.find(username);
-        Image image = loadProfileImage(profile.avatarResource(), 40, 40);
-        circle.setFill(image == null ? Color.web("#cfd9de") : new ImagePattern(image));
-        circle.setOnMouseClicked(event -> openProfile(username));
-        circle.setStyle("-fx-cursor: hand;");
     }
 
     private javafx.scene.Node createProfileGlyph(double size) {
@@ -209,8 +194,6 @@ public class ProfileController {
         }
         profileMessageButton.setManaged(!ownProfile);
         profileMessageButton.setVisible(!ownProfile);
-        profileSubscribeButton.setManaged(!ownProfile);
-        profileSubscribeButton.setVisible(!ownProfile);
 
         String displayName = currentUser == null ? "User"
                 : (currentUser.getDisplayName() == null || currentUser.getDisplayName().isBlank()
@@ -675,17 +658,55 @@ public class ProfileController {
         });
     }
 
-    @FXML private void handleFollowJavaFx() { UserSession.getInstance().toggleFollow("openjfx"); refreshFollowButtons(); refreshProfileData(); }
-    @FXML private void handleFollowDesign() { UserSession.getInstance().toggleFollow("designdaily"); refreshFollowButtons(); refreshProfileData(); }
+    private void populateProfileSuggestions() {
+        profileSuggestionsWidget.getChildren().clear();
+        Label title = new Label("You might like");
+        title.getStyleClass().add("widget-title");
+        profileSuggestionsWidget.getChildren().add(title);
 
-    private void refreshFollowButtons() {
-        followButton(followJavaFxButton, UserSession.getInstance().isFollowing("openjfx"));
-        followButton(followDesignButton, UserSession.getInstance().isFollowing("designdaily"));
-    }
+        List<String> suggestions = postStore.getSharedProfileUsernames().stream()
+                .filter(username -> !username.equalsIgnoreCase(UserSession.getInstance().getUsername()))
+                .filter(username -> viewedProfile == null
+                        || !username.equalsIgnoreCase(viewedProfile.username()))
+                .filter(username -> !UserSession.getInstance().isFollowing(username))
+                .sorted()
+                .limit(3)
+                .toList();
+        for (String username : suggestions) {
+            AccountProfile account = AccountDirectory.find(username);
+            HBox row = new HBox(10);
+            row.setAlignment(Pos.CENTER_LEFT);
+            Node avatar = ProfileHoverCard.avatarNode(account, 40);
+            VBox identity = new VBox(1);
+            HBox.setHgrow(identity, Priority.ALWAYS);
+            Label name = new Label(account.displayName());
+            name.getStyleClass().add("widget-name");
+            Label handle = new Label("@" + account.username());
+            handle.getStyleClass().add("secondary-text");
+            identity.getChildren().addAll(name, handle);
+            Button follow = new Button("Follow");
+            follow.getStyleClass().add("follow-button");
+            follow.setOnAction(event -> {
+                UserSession.getInstance().toggleFollow(username);
+                populateProfileSuggestions();
+                refreshProfileData();
+                event.consume();
+            });
+            row.getChildren().addAll(avatar, identity, follow);
+            ProfileHoverCard.attachIdentity(
+                    avatar, name, handle, username, () -> openProfile(username));
+            profileSuggestionsWidget.getChildren().add(row);
+        }
 
-    private void followButton(Button button, boolean following) {
-        button.setText(following ? "Following" : "Follow");
-        button.setStyle(following ? "-fx-background-color: white; -fx-text-fill: #0f1419; -fx-border-color: #cfd9de; -fx-border-radius: 18; -fx-background-radius: 18; -fx-font-weight: bold; -fx-padding: 7 12;" : "");
+        Label more = new Label(suggestions.isEmpty() ? "No suggestions yet" : "Show more");
+        more.getStyleClass().add("show-more");
+        if (!suggestions.isEmpty()) {
+            more.setOnMouseClicked(event -> {
+                postStore.requestView("people");
+                NavigationManager.switchScene("/views/Feed.fxml");
+            });
+        }
+        profileSuggestionsWidget.getChildren().add(more);
     }
 
     @FXML private void handleGoToHome() { goToView("home"); }
@@ -695,7 +716,6 @@ public class ProfileController {
     @FXML private void handleGoToChat() { goToView("chat"); }
     @FXML private void handleGoToBookmarks() { goToView("bookmarks"); }
     @FXML private void handleGoToMore() { goToView("more"); }
-    @FXML private void handleSubscribe() { UserSession.getInstance().toggleFollow(viewedProfile.username()); refreshProfileData(); }
     @FXML private void handleGoToUnavailable() { goToView("unavailable"); }
 
     @FXML
@@ -746,7 +766,7 @@ public class ProfileController {
     @FXML
     private void handleSearch() {
         if (profileSearchField.getText().isBlank()) return;
-        postStore.requestView("explore");
+        postStore.requestView("people");
         postStore.requestSearch(profileSearchField.getText().trim());
         NavigationManager.switchScene("/views/Feed.fxml");
     }

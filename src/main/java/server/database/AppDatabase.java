@@ -27,6 +27,7 @@ import java.util.UUID;
  * automatically imports the old accounts.json database once.</p>
  */
 public final class AppDatabase {
+    private static final String CLEAN_START_MIGRATION = "clean_start_remove_seed_accounts_v1";
     private static final AppDatabase INSTANCE = new AppDatabase();
     private final AccountStore store;
 
@@ -260,7 +261,6 @@ public final class AppDatabase {
         private void ensureUserColumns() {
             ensureColumn("ALTER TABLE app_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
             ensureColumn("ALTER TABLE app_users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
-            ensureColumn("ALTER TABLE app_users ADD COLUMN is_fake INTEGER NOT NULL DEFAULT 0");
             bootstrapAdmin();
         }
 
@@ -292,7 +292,7 @@ public final class AppDatabase {
 
         private void migrateLegacyJson() {
             Path legacyFile = directory.resolve("accounts.json");
-            if (!Files.isRegularFile(legacyFile) || countUsers() > 0) return;
+            if (!Files.isRegularFile(legacyFile) || countUsers() > 0 || cleanStartAlreadyApplied()) return;
             try {
                 LegacyState legacy = new Gson().fromJson(Files.readString(legacyFile), LegacyState.class);
                 if (legacy == null || legacy.accounts == null || legacy.accounts.isEmpty()) return;
@@ -329,6 +329,21 @@ public final class AppDatabase {
                 System.out.println("Imported legacy accounts.json into SQLite.");
             } catch (Exception exception) {
                 throw new IllegalStateException("Could not migrate accounts.json to SQLite", exception);
+            }
+        }
+
+        private boolean cleanStartAlreadyApplied() {
+            try (Connection connection = connection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         SELECT 1 FROM app_settings
+                         WHERE setting_key = ? LIMIT 1
+                         """)) {
+                statement.setString(1, CLEAN_START_MIGRATION);
+                try (ResultSet result = statement.executeQuery()) {
+                    return result.next();
+                }
+            } catch (SQLException missingSettingsTable) {
+                return false;
             }
         }
 
@@ -515,7 +530,6 @@ public final class AppDatabase {
         private void ensureUserColumns() {
             ensureColumn("ALTER TABLE app_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
             ensureColumn("ALTER TABLE app_users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
-            ensureColumn("ALTER TABLE app_users ADD COLUMN is_fake INTEGER NOT NULL DEFAULT 0");
             String username = configuredAdminUsername();
             if (username != null) {
                 database.execute(
@@ -630,7 +644,6 @@ public final class AppDatabase {
               professional INTEGER NOT NULL DEFAULT 0,
               role TEXT NOT NULL DEFAULT 'user',
               status TEXT NOT NULL DEFAULT 'active',
-              is_fake INTEGER NOT NULL DEFAULT 0,
               password_hash TEXT NOT NULL
             )
             """;

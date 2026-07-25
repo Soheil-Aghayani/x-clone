@@ -14,65 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class AccountDirectory {
-    private static final Map<String, AccountProfile> KNOWN = Map.ofEntries(
-            Map.entry("elonmusk", new AccountProfile(
-                    "Elon Musk", "elonmusk", "Starmind", "", "spacex.com/spaceai/starmind",
-                    "Joined June 2009", "1,370", "240.9M", true, false,
-                    "/images/accounts/elon-avatar.jpg", "/images/accounts/elon-banner.jpg")),
-            Map.entry("elonmuskpda", new AccountProfile(
-                    "Not Elon Musk", "ElonMuskPDA",
-                    "Who controls the memes, controls the Universe · Dogecoin · Aliens · Elon Musk Parody Account",
-                    "", "", "Joined February 2011", "54", "2.3M", true, true,
-                    "/images/accounts/not-elon-avatar.jpg", "/images/accounts/not-elon-banner.jpg")),
-            Map.entry("openjfx", new AccountProfile(
-                    "JavaFX", "openjfx", "Open-source client application platform for desktop, mobile and embedded systems.",
-                    "", "openjfx.io", "Joined May 2011", "128", "91.4K", true, false,
-                    "/images/accounts/arjun-mehta.png", null)),
-            Map.entry("designdaily", new AccountProfile(
-                    "Design Daily", "designdaily", "Daily ideas about interface design, typography, and product craft.",
-                    "", "", "Joined September 2018", "420", "36.8K", false, false,
-                    "/images/accounts/marcus-cole.png", null)),
-            Map.entry("laylacodes", new AccountProfile(
-                    "Layla Rahimi", "laylacodes", "Java engineer building calm, useful software. فارسی / English.",
-                    "Berlin", "layla.dev", "Joined April 2018", "612", "18.7K", true, false,
-                    "/images/accounts/layla-rahimi.png", null)),
-            Map.entry("marcusux", new AccountProfile(
-                    "Marcus Cole", "marcusux", "Product designer. Accessibility, systems thinking, and tiny details.",
-                    "London", "marcuscole.design", "Joined January 2016", "894", "42.1K", false, false,
-                    "/images/accounts/marcus-cole.png", null)),
-            Map.entry("minapixels", new AccountProfile(
-                    "Mina Park", "minapixels", "Indie game developer making small worlds with big feelings.",
-                    "Seoul", "minapixels.games", "Joined August 2019", "337", "27.4K", false, false,
-                    "/images/accounts/mina-park.png", null)),
-            Map.entry("danielscience", new AccountProfile(
-                    "Daniel Hart", "danielscience", "Science journalist. Space, climate, and the stories inside the data.",
-                    "Boston", "danielhart.media", "Joined March 2012", "1,104", "118K", true, false,
-                    "/images/accounts/daniel-hart.png", null)),
-            Map.entry("sofiashots", new AccountProfile(
-                    "Sofía Reyes", "sofiashots", "Sports photographer chasing decisive moments and good light.",
-                    "Madrid", "sofia.photos", "Joined July 2015", "728", "64.2K", false, false,
-                    "/images/accounts/sofia-reyes.png", null)),
-            Map.entry("arjunoss", new AccountProfile(
-                    "Arjun Mehta", "arjunoss", "Open-source maintainer. APIs, release engineering, and kind reviews.",
-                    "Bengaluru", "github.com/arjunoss", "Joined November 2017", "503", "31.8K", true, false,
-                    "/images/accounts/arjun-mehta.png", null))
-    );
-
     private AccountDirectory() {}
-
-    /**
-     * Only built-in demo identities may simulate replies. A locally stored
-     * profile wins over the demo list so a real registered user is never
-     * impersonated even if their handle matches a seeded account.
-     */
-    public static boolean isNpc(String username) {
-        String key = normalizeUsername(username);
-        if (key.isBlank()) return false;
-        User active = UserSession.getInstance().getCurrentUser();
-        if (active != null && key.equals(normalizeUsername(active.getUsername()))) return false;
-        if (PostStore.getInstance().findProfile(key) != null) return false;
-        return KNOWN.containsKey(key);
-    }
 
     public static AccountProfile find(String username) {
         if (username == null || username.isBlank()) return current();
@@ -83,10 +25,6 @@ public final class AccountDirectory {
         if (active != null && key.equals(normalizeUsername(active.getUsername()))) {
             return fromUser(active);
         }
-
-        // Seeded demo accounts keep their canned stats/images.
-        AccountProfile known = KNOWN.get(key);
-        if (known != null) return known;
 
         // Real accounts that logged in / edited profile on this machine.
         PostStore.UserProfile stored = PostStore.getInstance().findProfile(key);
@@ -108,11 +46,7 @@ public final class AccountDirectory {
 
     public static List<AccountProfile> all() {
         Map<String, AccountProfile> byUsername = new LinkedHashMap<>();
-        for (AccountProfile profile : KNOWN.values()) {
-            byUsername.put(normalizeUsername(profile.username()), profile);
-        }
         for (String username : PostStore.getInstance().knownUsernames()) {
-            if (KNOWN.containsKey(username)) continue;
             byUsername.put(username, find(username));
         }
         User active = UserSession.getInstance().getCurrentUser();

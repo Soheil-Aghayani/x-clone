@@ -74,10 +74,8 @@ Optional:
 
 | Key | Value |
 | --- | --- |
-| `XCLONE_NPC_INTERVAL_SECONDS` | `900` for one shared demo activity slot every 15 minutes |
 | `XCLONE_ADMIN_USERNAME` | `potato` if that existing account should receive the database `admin` role |
 
-Fake content is disabled by default. After signing in with the configured administrator, open **More → Settings and privacy** to enable or disable the shared demo network. The setting is stored in Turso, applies to every user, and cannot be changed by a normal account.
 
 Click **Deploy Web Service** and wait for the first build to finish.
 

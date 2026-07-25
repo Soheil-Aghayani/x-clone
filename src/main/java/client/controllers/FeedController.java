@@ -184,7 +184,10 @@ public class FeedController {
         updateComposerState("");
         activeHashtag = postStore.consumeRequestedHashtag();
         String requestedView = postStore.consumeRequestedView();
-        if (requestedView != null) viewMode = requestedView;
+        if (requestedView != null) {
+            viewMode = requestedView;
+            if (viewMode.equals("people")) searchResultTab = "People";
+        }
         selectedPostId = postStore.consumeRequestedPost();
         String requestedSearch = postStore.consumeRequestedSearch();
         if (requestedSearch != null) {
@@ -199,7 +202,7 @@ public class FeedController {
         });
         centerSearchField.textProperty().addListener((observable, oldText, newText) -> {
             searchQuery = newText == null ? "" : newText.trim();
-            if (viewMode.equals("explore")) refreshTimeline();
+            if (viewMode.equals("explore") || viewMode.equals("people")) refreshTimeline();
             scheduleRemoteSearch();
         });
         refreshFollowButtons();
@@ -343,7 +346,7 @@ public class FeedController {
             return "Chat";
         }
         if (viewMode.equals("bookmarks")) return "Bookmarks";
-        if (viewMode.equals("explore")) return "Explore";
+        if (viewMode.equals("explore") || viewMode.equals("people")) return "Explore";
         if (viewMode.equals("post-detail")) return "Post";
         return "Home";
     }
@@ -527,11 +530,16 @@ public class FeedController {
     private void handlePostTweet() {
         String content = tweetTextArea.getText().trim();
         User currentUser = UserSession.getInstance().getCurrentUser();
-        if ((content.isEmpty() && selectedMediaUri == null) || content.length() > MAX_POST_LENGTH || currentUser == null) {
+        String mediaToPublish = attachmentBar.isVisible()
+                && selectedMediaUri != null
+                && MediaLibrary.isAvailable(selectedMediaUri)
+                ? selectedMediaUri : null;
+        if ((content.isEmpty() && mediaToPublish == null)
+                || content.length() > MAX_POST_LENGTH || currentUser == null) {
             return;
         }
 
-        Post published = postStore.createPost(currentUser, content, selectedMediaUri);
+        Post published = postStore.createPost(currentUser, content, mediaToPublish);
         if (published == null) {
             XDialog.info(tweetTextArea.getScene() == null ? null : tweetTextArea.getScene().getWindow(),
                     "Post not sent",
@@ -539,6 +547,7 @@ public class FeedController {
             return;
         }
         tweetTextArea.clear();
+        selectedMediaUri = null;
         handleRemoveAttachment();
         activeHashtag = null;
         refreshTimeline();
@@ -863,6 +872,11 @@ public class FeedController {
             updateActiveNavigation();
             return;
         }
+        if (viewMode.equals("people")) {
+            renderPeopleDirectory();
+            updateActiveNavigation();
+            return;
+        }
         if (viewMode.equals("explore") && activeHashtag == null) {
             renderExplore();
             updateActiveNavigation();
@@ -992,6 +1006,7 @@ public class FeedController {
         headerFilterButton.setGraphic(AppIcons.icon("list-filter-icon.svg", 20, "#0f1419"));
         headerFilterButton.setOnAction(event -> handleShowExplore());
         centerColumn.setPrefWidth(600);
+        centerColumn.setMaxWidth(600);
         composerSection.setManaged(false);
         composerSection.setVisible(false);
         contentScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
@@ -1035,6 +1050,8 @@ public class FeedController {
 
     private void renderExplore() {
         hideRightSidebar();
+        centerColumn.setPrefWidth(600);
+        centerColumn.setMaxWidth(600);
         headerTitleLabel.setManaged(false);
         headerTitleLabel.setVisible(false);
         headerSpacer.setManaged(false);
@@ -1237,6 +1254,27 @@ public class FeedController {
             timelineContainer.getChildren().add(createLargeEmptyState("Join the conversation",
                     "Be the first person to reply to this post."));
         }
+    }
+
+    private void renderPeopleDirectory() {
+        hideRightSidebar();
+        centerColumn.setPrefWidth(600);
+        centerColumn.setMaxWidth(600);
+        headerTitleLabel.setManaged(false);
+        headerTitleLabel.setVisible(false);
+        headerSpacer.setManaged(false);
+        headerSpacer.setVisible(false);
+        centerSearchField.setManaged(true);
+        centerSearchField.setVisible(true);
+        centerSearchField.setPromptText("Search people");
+        centerSearchField.setMaxWidth(Double.MAX_VALUE);
+        headerFilterButton.setGraphic(AppIcons.icon("settings-gear-icon.svg", 20, "#0f1419"));
+        headerFilterButton.setOnAction(event -> { });
+
+        Label heading = sectionHeading("Connect");
+        heading.setPadding(new Insets(18, 20, 8, 20));
+        timelineContainer.getChildren().add(heading);
+        renderAccountSearch(centerSearchField.getText().trim());
     }
 
     private void renderAccountSearch(String query) {
@@ -1506,59 +1544,6 @@ public class FeedController {
             default -> "Choose an option from the More menu.";
         };
         timelineContainer.getChildren().add(createLargeEmptyState(moreSection, description));
-        User current = UserSession.getInstance().getCurrentUser();
-        if ("Settings and privacy".equals(moreSection) && current != null && current.isAdmin()) {
-            VBox admin = new VBox(8);
-            admin.setPadding(new Insets(18, 28, 28, 28));
-            Label heading = new Label("Administrator");
-            heading.setFont(AppFonts.fontFor(heading.getText(), 20, FontWeight.BOLD));
-            CheckBox fakeContent = new CheckBox("Enable automated demo accounts and posts");
-            Label status = new Label("Loading server setting…");
-            status.setTextFill(Color.web("#536471"));
-            fakeContent.setDisable(true);
-            admin.getChildren().addAll(heading, fakeContent, status);
-            timelineContainer.getChildren().add(admin);
-
-            Task<shared.models.SocialSettings> load = new Task<>() {
-                @Override protected shared.models.SocialSettings call() throws Exception {
-                    return sharedSocialClient.settings();
-                }
-            };
-            load.setOnSucceeded(event -> {
-                fakeContent.setSelected(load.getValue().fakeContentEnabled());
-                fakeContent.setDisable(false);
-                status.setText("This setting is stored on the server and affects every user.");
-            });
-            load.setOnFailed(event -> status.setText("Could not load the server setting."));
-            Thread loader = new Thread(load, "x-admin-settings");
-            loader.setDaemon(true);
-            loader.start();
-
-            fakeContent.setOnAction(event -> {
-                boolean requested = fakeContent.isSelected();
-                fakeContent.setDisable(true);
-                status.setText("Saving…");
-                Task<shared.models.SocialSettings> save = new Task<>() {
-                    @Override protected shared.models.SocialSettings call() throws Exception {
-                        return sharedSocialClient.updateFakeContent(requested);
-                    }
-                };
-                save.setOnSucceeded(done -> {
-                    fakeContent.setSelected(save.getValue().fakeContentEnabled());
-                    fakeContent.setDisable(false);
-                    status.setText("Saved for everyone.");
-                    refreshSharedSocialState();
-                });
-                save.setOnFailed(done -> {
-                    fakeContent.setSelected(!requested);
-                    fakeContent.setDisable(false);
-                    status.setText("The server rejected this change.");
-                });
-                Thread saver = new Thread(save, "x-admin-settings-save");
-                saver.setDaemon(true);
-                saver.start();
-            });
-        }
     }
 
     private void fillBookmarkResults(VBox results, String query) {
@@ -2330,10 +2315,6 @@ public class FeedController {
             ChatStore.getInstance().send(conversation, activeUsername, textContent);
             input.clear();
             refreshTimeline();
-
-            // Only seeded demo NPCs simulate a response. Real users reply for themselves.
-            String otherUser = conversation.otherParticipant(activeUsername);
-            triggerAutoReply(conversation, otherUser, textContent);
         };
         send.setOnAction(event -> sendMessage.run());
         input.setOnAction(event -> sendMessage.run());
@@ -2349,47 +2330,6 @@ public class FeedController {
         java.time.ZonedDateTime zdt = instant.atZone(java.time.ZoneId.systemDefault());
         java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH);
         return zdt.format(formatter);
-    }
-
-    private void triggerAutoReply(ChatStore.Conversation conversation, String sender, String userMsg) {
-        if (!AccountDirectory.isNpc(sender)) return;
-        Thread replyThread = new Thread(() -> {
-            try {
-                Thread.sleep(1500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-            Platform.runLater(() -> {
-                String replyText = getMockReply(sender, userMsg);
-                boolean sent = ChatStore.getInstance().sendAutomaticReply(conversation, sender, replyText);
-                if (sent && viewMode.equals("chat") && selectedConversationId != null && selectedConversationId == conversation.id()) {
-                    refreshTimeline();
-                }
-            });
-        }, "x-clone-npc-reply");
-        replyThread.setDaemon(true);
-        replyThread.start();
-    }
-
-    private String getMockReply(String sender, String userMsg) {
-        String msg = userMsg.toLowerCase();
-        AccountProfile profile = AccountDirectory.find(sender);
-        String name = profile != null ? profile.displayName() : sender;
-
-        if (msg.contains("hi") || msg.contains("hello") || msg.contains("hey")) {
-            return "Hey there! Thanks for reaching out. How's it going?";
-        }
-        if (msg.contains("how are you") || msg.contains("how's it going")) {
-            return "I'm doing great, working on some new designs! How about you?";
-        }
-        if (msg.contains("clone") || msg.contains("twitter") || msg.contains("x")) {
-            return "This X desktop clone is looking really premium! JavaFX is surprisingly fast.";
-        }
-        if (msg.contains("good") || msg.contains("nice") || msg.contains("cool") || msg.contains("great")) {
-            return "Awesome! Glad to hear that.";
-        }
-        return "Hey! I'm a bit busy at the moment, but let's connect later. Talk soon!";
     }
 
     private void showNewChatDialog() {
@@ -2550,6 +2490,7 @@ public class FeedController {
         rightSidebar.setManaged(false);
         rightSidebar.setVisible(false);
         centerColumn.setPrefWidth(1010);
+        centerColumn.setMaxWidth(1010);
     }
 
     private HBox createSectionTabs(List<String> names, String active, java.util.function.Consumer<String> action) {
@@ -2671,7 +2612,7 @@ public class FeedController {
                 chatNavButton, bookmarksNavButton, profileNavButton, moreNavButton);
         buttons.forEach(button -> button.getStyleClass().remove("nav-button-active"));
         Button active = switch (viewMode) {
-            case "explore" -> exploreNavButton;
+            case "explore", "people" -> exploreNavButton;
             case "notifications" -> notificationsNavButton;
             case "chat" -> chatNavButton;
             case "bookmarks" -> bookmarksNavButton;
@@ -2685,12 +2626,15 @@ public class FeedController {
     private HBox createPostCard(Post post) {
         HBox postRow = new HBox(12);
         postRow.getStyleClass().add("post-row");
+        postRow.setMaxWidth(600);
+        postRow.setPrefWidth(600);
 
         String initial = post.getAuthorName().isBlank() ? "U" : post.getAuthorName().substring(0, 1).toUpperCase();
         javafx.scene.Node avatar = ProfileHoverCard.avatarNode(AccountDirectory.find(post.getAuthorUsername()), 42);
 
         VBox contentStack = new VBox(5);
         HBox.setHgrow(contentStack, Priority.ALWAYS);
+        contentStack.setMaxWidth(526);
         HBox headerRow = new HBox(8);
 
         Label displayName = new Label(post.getAuthorName());

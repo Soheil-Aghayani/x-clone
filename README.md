@@ -27,8 +27,7 @@ X Clone recreates the main X desktop experience in a native application. It comb
 | Profiles | Avatars, banners, bios, follower counts, post history, profile navigation, and follow controls |
 | Conversations | Full post threads, nested replies, quote posts, reposts, likes, bookmarks, menus, counters, and interaction animations |
 | Discovery | Notifications, mentions, search, trends, news, sports, and entertainment views |
-| Optional demo network | Ten distinct NPC personalities can share one global stream, but fake content is disabled by default and can only be enabled by a database administrator |
-| Chat | Passcode flow, inbox filters, message settings, and NPC-only automatic replies |
+| Chat | Passcode flow, inbox filters, message settings, and direct/group conversation layouts |
 | International text | Geist 400/600 for the interface, with Vazirmatn fallback for Persian and other complex scripts |
 | Desktop | Responsive JavaFX layout, X-inspired styling, and a portable Windows package |
 
@@ -37,7 +36,7 @@ X Clone recreates the main X desktop experience in a native application. It comb
 
 - Dynamic notification badges in the sidebar and window title
 - Clickable avatars, display names, and usernames
-- Durable server-hosted profile pictures, post images, and animated GIF media
+- Optimized, durable server-hosted profile pictures, post images, and animated GIF media
 - Full-screen X-style media viewer with conversation panel, navigation, loading, retry, and error states
 - Character countdown warnings and disabled posting beyond the limit
 - Account menu, password-visibility controls, custom dialogs, and secure chat passcodes
@@ -117,7 +116,6 @@ When every desktop client uses the same public backend URL, these features are s
 - notifications, mentions, and read state
 - uploaded post media, profile pictures, banners, and GIFs
 - server-derived user search, feed discovery, suggestions, hashtags, and trends
-- the optional shared NPC ecosystem when an administrator enables it
 
 These parts remain local to each desktop for now:
 
@@ -125,15 +123,10 @@ These parts remain local to each desktop for now:
 - chat messages, passcodes, and chat settings
 
 > [!NOTE]
-> The backend is the source of truth for the core social network. Selected PNG, JPEG, and GIF files are uploaded through the authenticated API and served from stable media endpoints, so another computer can display them.
+> The backend is the source of truth for the core social network. PNG and JPEG uploads are resized to a maximum 1920px dimension and compressed before Base64 database storage. GIF bytes are preserved so animations keep working. Every media file is served from a stable authenticated upload endpoint, so another computer can display it.
 
-### Living demo network
-
-The backend can create ten clearly labelled automated demo accounts. Their original content is assembled from topic-specific banks covering development, design, science, gaming, sports, photography, music, books, security, and startups. The combinations provide thousands of possible posts.
-
-Every personality has a bundled portrait, profile cover, location, human-style bio, and three topic-specific media photographs. Fake content is **off by default**. An account whose `role` column is `admin` can enable it from **More → Settings and privacy**; the backend rejects the same request from ordinary users. The switch is stored in the database and affects every client.
-
-The default activity interval is 15 minutes. It can be changed on the backend with `XCLONE_NPC_INTERVAL_SECONDS`; production values are limited to at least 60 seconds. When a free host sleeps, activity safely catches up by a limited number of intervals on the next authenticated sync—no separate cron service is required.
+> [!IMPORTANT]
+> The cleanup release contains a one-time database migration named `clean_start_remove_seed_accounts_v1`. On the first backend start after deployment it removes all previous accounts and social activity, then stores a completion marker. Later restarts do **not** erase newly created accounts.
 
 ## Portable Windows build
 
@@ -173,7 +166,6 @@ Backend environment variables:
 | `PORT` | HTTP port supplied automatically by Render |
 | `TURSO_DATABASE_URL` | Hosted `libsql://` database address |
 | `TURSO_AUTH_TOKEN` | Private Turso token stored in Render environment variables |
-| `XCLONE_NPC_INTERVAL_SECONDS` | Optional shared NPC activity interval; defaults to `900` seconds |
 | `XCLONE_ADMIN_USERNAME` | Optional username to bootstrap as a database-backed administrator, for example `potato` |
 
 Desktop client settings:

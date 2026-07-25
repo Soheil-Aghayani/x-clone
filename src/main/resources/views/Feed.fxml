@@ -45,7 +45,7 @@
                 HBox.hgrow="ALWAYS" styleClass="page-scroll">
         <content>
             <HBox minWidth="1010.0" prefWidth="1010.0" alignment="TOP_LEFT" styleClass="page-content">
-    <VBox fx:id="centerColumn" minWidth="600.0" prefWidth="600.0" maxWidth="Infinity" HBox.hgrow="ALWAYS" styleClass="center-column">
+    <VBox fx:id="centerColumn" minWidth="600.0" prefWidth="600.0" maxWidth="600.0" HBox.hgrow="ALWAYS" styleClass="center-column">
         <HBox fx:id="topHeader" alignment="CENTER_LEFT" minHeight="54.0" prefHeight="54.0" styleClass="top-header">
             <Label fx:id="headerTitleLabel" text="Home" styleClass="header-title" />
             <TextField fx:id="centerSearchField" managed="false" visible="false" promptText="Search" HBox.hgrow="ALWAYS" styleClass="search-field" />
