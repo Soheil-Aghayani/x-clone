@@ -12,6 +12,8 @@
 
   **A native JavaFX social app inspired by X, with a shared Java backend and Turso database.**
 
+  <sub>One of the native systems experiments in the <a href="https://github.com/Soheil-Aghayani">Soheil Aghayani project constellation</a>.</sub>
+
   [Quick start](#quick-start) · [Features](#the-experience) · [Architecture](#architecture) · [Portable build](#portable-windows-build) · [Deployment](DEPLOY-RENDER-TURSO.md)
 </div>
 
